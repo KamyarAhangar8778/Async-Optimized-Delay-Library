@@ -1,0 +1,26 @@
+# CodeVisionAVR build output
+Debug/
+Release/
+*.o
+*.a
+*.rom
+*.hex
+*.lst
+*.map
+*.cof
+*.obj
+*.sym1
+*.sym2
+*.sym3
+*.str1
+*.cci
+*.fct
+
+# Editor backup files
+*.c~
+*.prj~
+*.bak
+*.tmp
+
+# Simulation output (Proteus-generated files you don't want versioned)
+Simulation/
