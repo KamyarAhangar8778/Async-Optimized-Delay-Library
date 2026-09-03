@@ -140,7 +140,6 @@ typedef void (*async_delay_cb_t)(unsigned char slot_id);
 #define ASYNC_DELAY_NO_SLOT 0xFF
 
 // ---------- Internal data (static to avoid multiple-definition) ----------
-#pragma used+
 
 typedef struct {
     async_tick_t     target;    // tick when this delay expires
@@ -319,7 +318,5 @@ static void async_delay_tick(void)
         }
     }
 }
-
-#pragma used-
 
 #endif

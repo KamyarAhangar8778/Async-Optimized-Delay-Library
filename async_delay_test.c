@@ -41,6 +41,7 @@ static unsigned long  loop_count = 0;      // 32-bit: never wraps at 60000
 // ---------- Callback: toggle LED0 flag (runs in ISR, keep short!) ----------
 void cb_led0_toggle(unsigned char slot_id)
 {
+    (void)slot_id;       // parameter unused — silence warning
     led0_toggle ^= 1;
 }
 
@@ -48,6 +49,7 @@ void cb_led0_toggle(unsigned char slot_id)
 void cb_should_not_fire(unsigned char slot_id)
 {
     // Just set a flag - do NOT touch the LCD from an ISR
+    (void)slot_id;       // parameter unused — silence warning
     test_cancel_failed = 1;
 }
 
