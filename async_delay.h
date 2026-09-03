@@ -33,6 +33,9 @@
 //     16-bit tick: 32767 ticks   (32.7s at 1ms tick)
 //     32-bit tick: ~2^31 ticks   (24.8 days at 1ms tick)
 //   A delay longer than half the range is unreliable (wrap ambiguity).
+// - Idle tick cost is ~1/5 of a full scan when ASYNC_DELAY_OPT_BITMASK=1.
+//   Optimization flags: ASYNC_DELAY_OPT_BITMASK (1), ASYNC_DELAY_OPT_MERGED_FLAGS (1),
+//   ASYNC_DELAY_OPT_SPLIT_ARRAYS (0). See plans/003 for the full design.
 //
 // ============================================================
 // Quick Start:
@@ -119,6 +122,35 @@
 #define ASYNC_DELAY_CALLBACK_RESCHEDULE 1
 #endif
 
+// ============ Optimization flags ============
+// ASYNC_DELAY_OPT_BITMASK   : 1 = active-slot bitmask; async_delay_tick()
+//                             visits ONLY the slots whose bit is set in
+//                             _async_active_mask (idle tick ~12 cycles vs ~100).
+#ifndef ASYNC_DELAY_OPT_BITMASK
+#define ASYNC_DELAY_OPT_BITMASK 1
+#endif
+
+// ASYNC_DELAY_OPT_MERGED_FLAGS : 1 = merge state + repeat into one flags byte
+//                             per slot (saves 1 byte/slot + one load in tick).
+#ifndef ASYNC_DELAY_OPT_MERGED_FLAGS
+#define ASYNC_DELAY_OPT_MERGED_FLAGS 1
+#endif
+
+// ASYNC_DELAY_OPT_SPLIT_ARRAYS : 1 = split the slot struct into parallel arrays
+//                             (target/duration/callback/flags). Slightly faster
+//                             AVR addressing (no struct offsets). Opt-in.
+#ifndef ASYNC_DELAY_OPT_SPLIT_ARRAYS
+#define ASYNC_DELAY_OPT_SPLIT_ARRAYS 0
+#endif
+
+// Constraints on the opt combinations:
+#if ASYNC_DELAY_OPT_BITMASK && ASYNC_DELAY_MAX_SLOTS > 8
+#error "[async_delay] ASYNC_DELAY_OPT_BITMASK supports at most 8 slots (8-bit mask)."
+#endif
+#if ASYNC_DELAY_OPT_SPLIT_ARRAYS && !ASYNC_DELAY_OPT_BITMASK
+#error "[async_delay] ASYNC_DELAY_OPT_SPLIT_ARRAYS requires ASYNC_DELAY_OPT_BITMASK=1."
+#endif
+
 // ---------- Tick type based on TIMER_BITS ----------
 #if ASYNC_DELAY_TIMER_BITS == 8
     typedef unsigned char async_tick_t;
@@ -141,6 +173,15 @@ typedef void (*async_delay_cb_t)(unsigned char slot_id);
 
 // ---------- Internal data (static to avoid multiple-definition) ----------
 
+#if ASYNC_DELAY_OPT_MERGED_FLAGS
+#define ASYNC_FLAG_REPEAT  0x04   // flags bit 2 = periodic
+typedef struct {
+    async_tick_t     target;    // tick when this delay expires
+    async_tick_t     duration;  // stored for periodic re-arm
+    async_delay_cb_t callback;  // NULL = polling-only mode
+    unsigned char    flags;     // [1:0]=state (FREE/ACTIVE/EXPIRED), [2]=repeat
+} _async_slot_t;
+#else
 typedef struct {
     async_tick_t     target;    // tick when this delay expires
     async_tick_t     duration;  // stored for periodic re-arm
@@ -148,9 +189,55 @@ typedef struct {
     unsigned char    state;     // FREE / ACTIVE / EXPIRED
     unsigned char    repeat;    // 1 = periodic (auto re-arm), 0 = one-shot
 } _async_slot_t;
+#endif
 
+#if ASYNC_DELAY_OPT_SPLIT_ARRAYS
+static async_tick_t     _async_target[ASYNC_DELAY_MAX_SLOTS];
+static async_tick_t     _async_duration[ASYNC_DELAY_MAX_SLOTS];
+static async_delay_cb_t _async_callback[ASYNC_DELAY_MAX_SLOTS];
+static unsigned char    _async_flags[ASYNC_DELAY_MAX_SLOTS];
+#if !ASYNC_DELAY_OPT_MERGED_FLAGS
+static unsigned char    _async_repeat[ASYNC_DELAY_MAX_SLOTS];
+#endif
+#else
 static _async_slot_t _async_slots[ASYNC_DELAY_MAX_SLOTS];
+#endif
+
 static volatile async_tick_t _async_tick_counter;
+#if ASYNC_DELAY_OPT_BITMASK
+static volatile unsigned char _async_active_mask;   // bit n = slot n ACTIVE
+#endif
+
+// Uniform per-slot access (works for both layouts)
+#if ASYNC_DELAY_OPT_SPLIT_ARRAYS
+#define _AD_TARGET(i)  (_async_target[i])
+#define _AD_DUR(i)     (_async_duration[i])
+#define _AD_CB(i)      (_async_callback[i])
+#define _AD_FLAGS(i)   (_async_flags[i])
+#else
+#define _AD_TARGET(i)  (_async_slots[i].target)
+#define _AD_DUR(i)     (_async_slots[i].duration)
+#define _AD_CB(i)      (_async_slots[i].callback)
+#if ASYNC_DELAY_OPT_MERGED_FLAGS
+#define _AD_FLAGS(i)   (_async_slots[i].flags)
+#else
+#define _AD_FLAGS(i)   (_async_slots[i].state)
+#endif
+#endif
+#if ASYNC_DELAY_OPT_MERGED_FLAGS
+#define _AD_STATE(i)   ((unsigned char)(_AD_FLAGS(i) & 0x03))
+#define _AD_REPEAT(i)  ((_AD_FLAGS(i) & ASYNC_FLAG_REPEAT) != 0)
+#else
+#define _AD_STATE(i)   (_AD_FLAGS(i))
+#if ASYNC_DELAY_OPT_SPLIT_ARRAYS
+#define _AD_REPEAT(i)  (_async_repeat[i])
+#else
+#define _AD_REPEAT(i)  (_async_slots[i].repeat)
+#endif
+#endif
+
+// Half the tick range - compile-time constant (was recomputed every tick).
+#define _ASYNC_HALF_RANGE ((async_tick_t)(~((async_tick_t)0) >> 1))
 
 // ---------- Public API Implementation ----------
 
@@ -160,8 +247,11 @@ static void async_delay_init(void)
 {
     unsigned char i;
     _async_tick_counter = 0;
+#if ASYNC_DELAY_OPT_BITMASK
+    _async_active_mask = 0;
+#endif
     for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)
-        _async_slots[i].state = ASYNC_SLOT_FREE;
+        _AD_FLAGS(i) = ASYNC_SLOT_FREE;
 }
 
 // Internal: common start for one-shot and periodic delays.
@@ -174,7 +264,11 @@ static unsigned char _async_delay_start_common(async_tick_t duration,
 
     for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)
     {
-        if (_async_slots[i].state == ASYNC_SLOT_FREE)
+#if ASYNC_DELAY_OPT_BITMASK
+        if ((_async_active_mask & (1 << i)) == 0)   // bit clear => slot FREE
+#else
+        if (_AD_STATE(i) == ASYNC_SLOT_FREE)
+#endif
         {
 #if ASYNC_DELAY_TIMER_BITS >= 16
             // AVR is 8-bit: reading a 16/32-bit volatile variable is NOT atomic.
@@ -187,11 +281,28 @@ static unsigned char _async_delay_start_common(async_tick_t duration,
 #else
             now = _async_tick_counter;
 #endif
-            _async_slots[i].duration = duration;
-            _async_slots[i].target   = now + duration;
-            _async_slots[i].callback = callback;
-            _async_slots[i].repeat   = repeat;
-            _async_slots[i].state    = ASYNC_SLOT_ACTIVE;
+            _AD_DUR(i)    = duration;
+            _AD_TARGET(i) = now + duration;
+            _AD_CB(i)     = callback;
+#if ASYNC_DELAY_OPT_MERGED_FLAGS
+            // state + repeat in one byte
+            _AD_FLAGS(i)  = (unsigned char)(ASYNC_SLOT_ACTIVE |
+                                            (repeat ? ASYNC_FLAG_REPEAT : 0));
+#else
+            // separate state byte (and repeat, only in the struct layout)
+            _AD_FLAGS(i)  = ASYNC_SLOT_ACTIVE;
+#if ASYNC_DELAY_OPT_SPLIT_ARRAYS
+            _async_repeat[i] = repeat;      // split layout: own repeat array
+#else
+            _async_slots[i].repeat = repeat;  // struct layout
+#endif
+#endif
+#if ASYNC_DELAY_OPT_BITMASK
+            // single-byte write, done LAST so the slot is fully set before it
+            // becomes visible to the tick's mask walk. ISR never writes the
+            // mask, so no cli is needed for this byte itself.
+            _async_active_mask |= (1 << i);
+#endif
             return i;
         }
     }
@@ -226,9 +337,13 @@ static unsigned char async_delay_elapsed(unsigned char slot_id)
     if (slot_id >= ASYNC_DELAY_MAX_SLOTS)
         return 0;
 
-    if (_async_slots[slot_id].state == ASYNC_SLOT_EXPIRED)
+#if ASYNC_DELAY_OPT_BITMASK
+    if (_async_active_mask & (1 << slot_id))      // still running -> not elapsed
+        return 0;
+#endif
+    if (_AD_STATE(slot_id) == ASYNC_SLOT_EXPIRED)
     {
-        _async_slots[slot_id].state = ASYNC_SLOT_FREE;
+        _AD_FLAGS(slot_id) = ASYNC_SLOT_FREE;
         return 1;
     }
     return 0;
@@ -239,7 +354,79 @@ static unsigned char async_delay_elapsed(unsigned char slot_id)
 static void async_delay_cancel(unsigned char slot_id)
 {
     if (slot_id < ASYNC_DELAY_MAX_SLOTS)
-        _async_slots[slot_id].state = ASYNC_SLOT_FREE;
+    {
+#if ASYNC_DELAY_OPT_BITMASK
+        _async_active_mask &= (unsigned char)~(1 << slot_id);
+#endif
+        _AD_FLAGS(slot_id) = ASYNC_SLOT_FREE;
+    }
+}
+
+// ISR-context: process slot i that has been confirmed expired.
+static void _async_delay_expire_slot(unsigned char i)
+{
+#if ASYNC_DELAY_CALLBACK_RESCHEDULE
+    if (_AD_REPEAT(i) && _AD_CB(i) != (void *)0)
+    {
+        // Periodic: re-arm FIRST so the slot stays ACTIVE for its next
+        // cycle; the callback then runs with this slot still busy, so a
+        // self-reschedule from the callback lands in a DIFFERENT slot.
+        _AD_TARGET(i) += _AD_DUR(i);
+        _AD_CB(i)(i);
+        // state stays ACTIVE
+    }
+    else
+    {
+        // One-shot: free the slot BEFORE the callback so a
+        // self-reschedule can reuse this very slot.
+        if (_AD_CB(i) != (void *)0)
+        {
+#if ASYNC_DELAY_OPT_BITMASK
+            _async_active_mask &= (unsigned char)~(1 << i);
+#endif
+            _AD_FLAGS(i) = ASYNC_SLOT_FREE;
+            _AD_CB(i)(i);
+        }
+        else
+        {
+            // Polling mode: mark EXPIRED, user checks with elapsed()
+#if ASYNC_DELAY_OPT_BITMASK
+            _async_active_mask &= (unsigned char)~(1 << i);
+#endif
+            _AD_FLAGS(i) = ASYNC_SLOT_EXPIRED;
+        }
+    }
+#else
+    // Legacy ordering (flag 001 = 0): callback fires while slot still ACTIVE.
+    if (_AD_REPEAT(i) && _AD_CB(i) != (void *)0)
+    {
+        // Periodic: fire callback, then re-arm using target +=
+        // duration so timing stays steady even if a tick is late.
+        _AD_CB(i)(i);
+        _AD_TARGET(i) += _AD_DUR(i);
+        // state stays ACTIVE
+    }
+    else
+    {
+        // One-shot: fire callback (if any) then free the slot.
+        if (_AD_CB(i) != (void *)0)
+        {
+            _AD_CB(i)(i);
+#if ASYNC_DELAY_OPT_BITMASK
+            _async_active_mask &= (unsigned char)~(1 << i);
+#endif
+            _AD_FLAGS(i) = ASYNC_SLOT_FREE;
+        }
+        else
+        {
+            // Polling mode: mark EXPIRED, user checks with elapsed()
+#if ASYNC_DELAY_OPT_BITMASK
+            _async_active_mask &= (unsigned char)~(1 << i);
+#endif
+            _AD_FLAGS(i) = ASYNC_SLOT_EXPIRED;
+        }
+    }
+#endif
 }
 
 // MUST be called from timer ISR at exactly ASYNC_DELAY_TICK_HZ rate.
@@ -247,76 +434,62 @@ static void async_delay_cancel(unsigned char slot_id)
 // WARNING: Callbacks execute in ISR context - keep them very short!
 static void async_delay_tick(void)
 {
+#if ASYNC_DELAY_OPT_BITMASK
+    unsigned char m;
+    _async_tick_counter++;              // MUST increment even when idle
+    m = _async_active_mask;
+    if (m == 0)
+        return;                         // idle tick: ~12-16 cycles total
+
+#if ASYNC_DELAY_MAX_SLOTS > 4
+    // 5..8 slots: scan at most 8 bits, skipping cleared ones. Idle still returns
+    // above; this only runs when at least one slot is ACTIVE.
+    {
+        unsigned char i;
+        for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)
+        {
+            if (m & (1 << i))
+            {
+                if ((async_tick_t)(_async_tick_counter - _AD_TARGET(i)) < _ASYNC_HALF_RANGE)
+                    _async_delay_expire_slot(i);
+            }
+        }
+    }
+#else
+    // 1..4 slots: direct low-bit chain - no loop, no table.
+    while (m)
+    {
+        unsigned char i;
+        if (m & 1)
+            i = 0;
+        else if (m & 2)
+            i = 1;
+        else if (m & 4)
+            i = 2;
+        else
+            i = 3;
+        m &= (unsigned char)~(1 << i);
+        if ((async_tick_t)(_async_tick_counter - _AD_TARGET(i)) < _ASYNC_HALF_RANGE)
+            _async_delay_expire_slot(i);
+    }
+#endif
+#else
+    // Legacy: full linear scan (behavior identical to before when all flags 0).
     unsigned char i;
-    async_tick_t half;
-
     _async_tick_counter++;
-
-    // Half of the tick range - used for the wrap-safe comparison.
-    half = (async_tick_t)(~((async_tick_t)0) >> 1);
-
     for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)
     {
-        if (_async_slots[i].state == ASYNC_SLOT_ACTIVE)
+        if (_AD_STATE(i) == ASYNC_SLOT_ACTIVE)
         {
             // Wrap-safe "now is past target" test:
             // if (tick - target) < half_range, the delay has elapsed.
             // This stays correct across a 16/32-bit counter wrap, as long
             // as the delay is shorter than half the tick range.
-            if ((async_tick_t)(_async_tick_counter - _async_slots[i].target) < half)
-            {
-#if ASYNC_DELAY_CALLBACK_RESCHEDULE
-                if (_async_slots[i].repeat && _async_slots[i].callback != (void *)0)
-                {
-                    // Periodic: re-arm FIRST so the slot stays ACTIVE for its next
-                    // cycle; the callback then runs with this slot still busy, so a
-                    // self-reschedule from the callback lands in a DIFFERENT slot.
-                    _async_slots[i].target += _async_slots[i].duration;
-                    _async_slots[i].callback(i);
-                    // state stays ACTIVE
-                }
-                else
-                {
-                    // One-shot: free the slot BEFORE the callback so a
-                    // self-reschedule can reuse this very slot.
-                    if (_async_slots[i].callback != (void *)0)
-                    {
-                        _async_slots[i].state = ASYNC_SLOT_FREE;
-                        _async_slots[i].callback(i);
-                    }
-                    else
-                    {
-                        // Polling mode: mark EXPIRED, user checks with elapsed()
-                        _async_slots[i].state = ASYNC_SLOT_EXPIRED;
-                    }
-                }
-#else
-                if (_async_slots[i].repeat && _async_slots[i].callback != (void *)0)
-                {
-                    // Periodic: fire callback, then re-arm using target +=
-                    // duration so timing stays steady even if a tick is late.
-                    _async_slots[i].callback(i);
-                    _async_slots[i].target += _async_slots[i].duration;
-                    // state stays ACTIVE
-                }
-                else
-                {
-                    // One-shot: fire callback (if any) then free the slot.
-                    if (_async_slots[i].callback != (void *)0)
-                    {
-                        _async_slots[i].callback(i);
-                        _async_slots[i].state = ASYNC_SLOT_FREE;
-                    }
-                    else
-                    {
-                        // Polling mode: mark EXPIRED, user checks with elapsed()
-                        _async_slots[i].state = ASYNC_SLOT_EXPIRED;
-                    }
-                }
-#endif
-            }
+            if ((async_tick_t)(_async_tick_counter - _AD_TARGET(i)) < _ASYNC_HALF_RANGE)
+                _async_delay_expire_slot(i);
         }
     }
+#endif
 }
 
 #endif
