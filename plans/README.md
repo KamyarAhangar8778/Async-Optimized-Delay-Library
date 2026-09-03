@@ -17,7 +17,7 @@ row when done.
 |------|-------|----------|--------|------------|--------|
 | 001 | Fix self-rescheduling from callbacks (one-shot NO_SLOT, periodic dual-fire) | P1 | S | — | DONE |
 | 002 | Fix CPUClock mismatch in async_delay_test.cwp (16 vs 8 MHz) | P3 | S | — | DONE |
-| 003 | Optimize tick: active-slot bitmask + SoA + merged flags | P1 | M | — | IN PROGRESS (impl done at `3cec894`; awaiting user build) |
+| 003 | Optimize tick: active-slot bitmask + SoA + merged flags | P1 | M | — | DONE |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 
