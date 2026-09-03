@@ -167,7 +167,7 @@ static unsigned char _async_delay_start_common(async_tick_t duration,
 #if ASYNC_DELAY_TIMER_BITS >= 16
             // AVR is 8-bit: reading a 16/32-bit volatile variable is NOT atomic.
             // The ISR could increment the counter between byte loads, producing
-            // a corrupted value (e.g. 0x00FF→0x0100 read as 0x01FF).
+            // a corrupted value (e.g. 0x00FF?0x0100 read as 0x01FF).
             // Disable interrupts briefly to get a consistent snapshot.
             #asm("cli")
             now = _async_tick_counter;
