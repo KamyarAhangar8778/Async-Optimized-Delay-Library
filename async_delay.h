@@ -71,6 +71,10 @@
 //   - Invalid slot_id in elapsed/cancel -> safe, no crash
 //   - No free slot in start       -> returns 0xFF
 //   - tick_counter wrap           -> wrap-safe comparison (no early fire)
+//   - Self-rescheduling (start() inside a callback): one-shot callbacks are
+//     freed before firing, so a new start() inside them works. Periodic
+//     callbacks re-arm before firing; do NOT re-start the SAME periodic id
+//     from inside its callback (it would create a second timer).
 // ============================================================
 
 #ifndef _ASYNC_DELAY_INCLUDED_
@@ -104,6 +108,15 @@
 
 #if ASYNC_DELAY_MAX_SLOTS > 254
 #error "[async_delay] ASYNC_DELAY_MAX_SLOTS cannot exceed 254 (slot id 0xFF is reserved as error code)."
+#endif
+
+// Order of operations when a callback fires in async_delay_tick():
+//   1 = make the slot non-ACTIVE BEFORE calling the callback, so a callback
+//       that starts a new delay (self-reschedule) grabs a free slot cleanly.
+//   0 = legacy order (callback first, slot freed/re-armed after) — can return
+//       0xFF from start() inside a one-shot callback, or double-fire on periodic.
+#ifndef ASYNC_DELAY_CALLBACK_RESCHEDULE
+#define ASYNC_DELAY_CALLBACK_RESCHEDULE 1
 #endif
 
 // ---------- Tick type based on TIMER_BITS ----------
@@ -253,6 +266,32 @@ static void async_delay_tick(void)
             // as the delay is shorter than half the tick range.
             if ((async_tick_t)(_async_tick_counter - _async_slots[i].target) < half)
             {
+#if ASYNC_DELAY_CALLBACK_RESCHEDULE
+                if (_async_slots[i].repeat && _async_slots[i].callback != (void *)0)
+                {
+                    // Periodic: re-arm FIRST so the slot stays ACTIVE for its next
+                    // cycle; the callback then runs with this slot still busy, so a
+                    // self-reschedule from the callback lands in a DIFFERENT slot.
+                    _async_slots[i].target += _async_slots[i].duration;
+                    _async_slots[i].callback(i);
+                    // state stays ACTIVE
+                }
+                else
+                {
+                    // One-shot: free the slot BEFORE the callback so a
+                    // self-reschedule can reuse this very slot.
+                    if (_async_slots[i].callback != (void *)0)
+                    {
+                        _async_slots[i].state = ASYNC_SLOT_FREE;
+                        _async_slots[i].callback(i);
+                    }
+                    else
+                    {
+                        // Polling mode: mark EXPIRED, user checks with elapsed()
+                        _async_slots[i].state = ASYNC_SLOT_EXPIRED;
+                    }
+                }
+#else
                 if (_async_slots[i].repeat && _async_slots[i].callback != (void *)0)
                 {
                     // Periodic: fire callback, then re-arm using target +=
@@ -275,6 +314,7 @@ static void async_delay_tick(void)
                         _async_slots[i].state = ASYNC_SLOT_EXPIRED;
                     }
                 }
+#endif
             }
         }
     }
