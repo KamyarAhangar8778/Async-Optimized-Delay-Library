@@ -18,6 +18,7 @@ row when done.
 | 001 | Fix self-rescheduling from callbacks (one-shot NO_SLOT, periodic dual-fire) | P1 | S | — | DONE |
 | 002 | Fix CPUClock mismatch in async_delay_test.cwp (16 vs 8 MHz) | P3 | S | — | DONE |
 | 003 | Optimize tick: active-slot bitmask + SoA + merged flags | P1 | M | — | DONE |
+| 004 | Fix two bitmask bugs + O(1) tick (unroll, next-target, deferred cb) | P0 | L | 003 | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 
@@ -26,21 +27,31 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 - 001 and 002 are independent — either order works.
 - 002 requires the USER to re-run CodeWizardAVR (or not) at their discretion;
   the value fix takes effect whenever the wizard next writes `.cwp`.
+- 004 must run after 003 (it fixes two defects 003 introduced and rewrites the
+  same hot path). It is P0 because two of its items are correctness bugs.
 
 ## Findings considered and rejected
 
-- **ISR linear scan is O(MAX_SLOTS)**: now addressed by **Plan 003** (active-slot
-  bitmask → idle tick ~12–16 cycles vs ~60–120). No longer rejected; see 003.
-- **`half` recomputed every tick**: the compiler constant-folds it; no change.
+- **ISR linear scan is O(MAX_SLOTS)**: addressed by **Plan 003** (active-slot
+  bitmask), then made O(1) by **Plan 004** (earliest-target gate).
+- **`half` recomputed every tick**: fixed in 003 (`_ASYNC_HALF_RANGE`).
 - **Periodic + NULL callback "degrades to polling"**: documented behavior in the
   header comment; by design.
-- **cancel() vs ISR race can fire one last callback after cancel**: has no clean
-  fix (state is written by main while ISR reads it); treat as documented
-  limitation, not a bug.
+- **cancel() vs ISR race can fire one last callback after cancel**: the *mask*
+  half of this is a real lost-update bug — now **Plan 004 §4.2**, no longer
+  rejected. The residual "cancel one tick too late" window is inherent and stays
+  a documented limitation.
+- **`start()` treats an EXPIRED slot as free** (regression from 003): now
+  **Plan 004 §4.1**.
 - **Replacing cli/sei with double-read trick**: current cli window is ~3 cycles;
-  no measurable win. Not worth it.
+  no measurable win. Not worth it. (004 does upgrade `sei` → SREG restore, which
+  is a correctness fix, not this idea.)
+- **256-byte lowest-set-bit LUT / hand-written ASM tick**: rejected in
+  **Plan 004 §7.4** — the unrolled tick removes the bit search entirely, and
+  CVAVR's `_G000` symbol mangling makes inline ASM brittle in a header-only lib.
 - **Adding a host-side test harness (verification baseline)**: high value but NOT
-  selected by the user; remains a candidate for a future plan.
+  selected by the user; remains a candidate for a future plan. Plan 004's T1–T12
+  traces are the manual stand-in.
 - **New API `async_delay_remaining()`**: direction suggestion, not selected by
   the user; the data (target/duration/counter) already supports it in ~3 lines.
 - **G: mirror header copy has no version marker** (stale-copy risk): flagged in
