@@ -17,6 +17,7 @@ row when done.
 |------|-------|----------|--------|------------|--------|
 | 001 | Fix self-rescheduling from callbacks (one-shot NO_SLOT, periodic dual-fire) | P1 | S | — | DONE |
 | 002 | Fix CPUClock mismatch in async_delay_test.cwp (16 vs 8 MHz) | P3 | S | — | DONE |
+| 003 | Optimize tick: active-slot bitmask + SoA + merged flags | P1 | M | — | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 
@@ -28,9 +29,8 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 
 ## Findings considered and rejected
 
-- **ISR linear scan is O(MAX_SLOTS)**: at the configured MAX_SLOTS=4 the tick
-  cost is ~1% of CPU; not worth complexity. Revisit only if a hot-loop user raises
-  MAX_SLOTS significantly.
+- **ISR linear scan is O(MAX_SLOTS)**: now addressed by **Plan 003** (active-slot
+  bitmask → idle tick ~12–16 cycles vs ~60–120). No longer rejected; see 003.
 - **`half` recomputed every tick**: the compiler constant-folds it; no change.
 - **Periodic + NULL callback "degrades to polling"**: documented behavior in the
   header comment; by design.
