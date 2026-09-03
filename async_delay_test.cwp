@@ -2,7 +2,7 @@
 Toolset=AVR
 [Chip]
 Type=ATmega8
-CPUClock=16
+CPUClock=8
 XTALDivEnabled=0
 XTALDivValue=2
 XTALDivIndex=-1

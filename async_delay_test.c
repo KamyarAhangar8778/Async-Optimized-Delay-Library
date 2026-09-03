@@ -2,6 +2,8 @@
 async_delay Library Test Project
 Chip type           : ATmega8
 Clock frequency     : 8.000000 MHz (internal RC oscillator)
+// KEEP this at 8 MHz: Timer2 OCR2 = 124 below is calculated for 125 kHz.
+// If you change the clock, recompute OCR2 and update async_delay_test.cwp CPUClock.
 
 Tests the async_delay library:
   - Timer2 CTC generates 1ms ticks
