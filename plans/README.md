@@ -20,6 +20,7 @@ row when done.
 | 003 | Optimize tick: active-slot bitmask + SoA + merged flags | P1 | M | — | DONE |
 | 004 | Fix two bitmask bugs + O(1) tick (unroll, next-target, deferred cb) | P0 | L | 003 | DONE (Build 16 clean, Proteus OK; idle regression handled by 005) |
 | 005 | Remove the idle-tick register-spill regression 004 introduced | P1 | S | 004 | DONE (build clean, Proteus OK; idle ~117 → ~85, below the pre-004 ~88) |
+| 006 | Host-side test harness + version marker (end the throwaway-script era) | P0 | M | 005 | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 
