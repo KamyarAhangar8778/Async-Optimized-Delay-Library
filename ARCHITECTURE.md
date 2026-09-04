@@ -22,7 +22,7 @@ timer ISR; the app either gets a callback or polls.
 
 | File | Role |
 |------|------|
-| `async_delay.h` | The library. Only file you normally edit. ~920 lines (config-heavy; most of it is `#if` variants + comments). |
+| `async_delay.h` | The library. Only file you normally edit. ~1000 lines (config-heavy; most of it is `#if` variants + comments). |
 | `async_delay_test.c` | Test project: ATmega8 @ 8MHz, Timer2 CTC 1ms tick, LCD + LEDs. |
 | `async_delay_guide.md` | Persian usage guide (timers, OCR tables, CodeWizard). Human-facing, lower priority for edits. |
 | `async_delay_test.prj` | CodeVisionAVR project file. |
@@ -46,6 +46,7 @@ timer ISR; the app either gets a callback or polls.
 | `ASYNC_DELAY_FIX_ATOMIC_MASK` | `1` | **correctness**: SREG-preserving critical sections (plan 004 §4.2) | required by NEXT_TARGET when TIMER_BITS ≥ 16 |
 | `ASYNC_DELAY_OPT_UNROLL_TICK` | `1` | compile-time slot indices in the tick (plan 004 §7.1) | requires BITMASK |
 | `ASYNC_DELAY_OPT_NEXT_TARGET` | `1` | O(1) earliest-target gate (plan 004 §7.2) | requires BITMASK |
+| `ASYNC_DELAY_OPT_SPLIT_TICK` | `1` | keep the tick's fast path local-free; walk lives in a callee (plan 005 §4.1) | requires BITMASK |
 | `ASYNC_DELAY_DEFERRED_CALLBACKS` | `0` | **changes behavior**: callbacks run from `async_delay_poll()` in main context (plan 004 §7.3) | requires BITMASK, MAX_SLOTS ≤ 8 |
 
 Flag effect: `TIMER_BITS` selects the type of `async_tick_t`
@@ -96,7 +97,7 @@ All functions are `static` (header-only, avoids duplicate symbols); data is insi
 | `async_delay_start_periodic(duration, cb)` | Periodic, auto re-arm. `cb == NULL` is pointless (degrades to polling one-shot). |
 | `async_delay_elapsed(slot_id)` | Polling check. Returns 1 if EXPIRED, frees slot **and its allocation**, else 0. Invalid id → safe 0. |
 | `async_delay_cancel(slot_id)` | Frees the slot, clears every mask bit, recomputes the next target. Invalid id → no-op. |
-| `async_delay_tick()` | **ISR-only.** Increments counter, then O(1)-gates on the earliest target before touching any slot. Must run at exactly `TICK_HZ`. |
+| `async_delay_tick()` | **ISR-only.** Increments counter, then O(1)-gates on the earliest target before touching any slot. Declares no locals (§6.7); the sweep lives in `_async_delay_tick_walk()`. Must run at exactly `TICK_HZ`. |
 | `async_delay_poll()` | Only exists when `ASYNC_DELAY_DEFERRED_CALLBACKS=1`. Drains deferred callbacks in MAIN context. Call it from the main loop or callbacks never fire. |
 
 Slot lifecycle:
@@ -173,8 +174,17 @@ increments the counter, checks the mask, then:
 if (!_ASYNC_REACHED(_ad_now, _async_next_target))
     return;              /* nothing due: one compare, regardless of slot count */
 ```
-Recomputed by `_async_recompute_next()` (O(N)) **only** when a slot actually
-expired, and inside `cancel()`. `start()` needs just one compare.
+Recomputed by `_async_recompute_next()` (O(N)) after every slot walk, and inside
+`cancel()`. `start()` needs just one compare.
+
+The recompute after a walk is **unconditional**, not gated on "did something
+fire". Reaching the walk means the compare above held, and `_async_next_target`
+is always the exact minimum of the ACTIVE targets — so some ACTIVE slot has
+`target == _async_next_target`, satisfies the same compare, and fires. At least
+one slot always fires in a walk, so the cached minimum is always stale there.
+That reasoning is a speed argument only; an unconditional recompute is correct
+either way (it is O(N) and idempotent). Plan 004 carried an `_ad_fired` flag for
+this; plan 005 removed it as provably dead.
 
 **Safety direction (do not get this backwards)**: the cached value may be
 *earlier* than the true minimum — that only costs one wasted slot walk. It must
@@ -218,6 +228,47 @@ With a literal, all three fold into `SBRS` + `LDS` + absolute addressing (~13).
 If anyone later adds a runtime-indexed caller, the entire win silently
 disappears. There is deliberately **no** lowest-set-bit LUT and no hand-written
 ASM here — see plan 004 §7.4 for why both were rejected.
+
+The unrolled chain is wrapped in `_AD_TICK_SWEEP()`, with per-slot
+`_AD_TICK_S1`..`_AD_TICK_S7` macros that expand to nothing above `MAX_SLOTS`.
+That keeps one copy of the sweep body even though two tick shapes use it (§6.7),
+so the A/B flag cannot make them drift apart.
+
+### 6.7 Split tick — the CodeVisionAVR register-spill trap (`ASYNC_DELAY_OPT_SPLIT_TICK`)
+**CVAVR spills register locals at function *entry*, before any branch.** A hot
+function with a cheap early-exit path therefore pays the spill on the path that
+does nothing.
+
+Plan 004 hoisted three locals into `async_delay_tick()` (`_ad_now` as a 16-bit
+pair, `_ad_m`, `_ad_fired`) and CVAVR emitted:
+
+```asm
+_async_delay_tick_G000:
+	RCALL __SAVELOCR4        ; ~15 cycles, before the mask is even read
+	...
+	BREQ _0x2020005          ; idle exit
+_0x2020005:
+	RCALL __LOADLOCR4        ; ~15 cycles
+	RET
+```
+
+~30 cycles on **every** tick, so the idle tick went ~88 → ~117 cycles even
+though the loaded path got much faster (~425 → ~135). It was invisible in the
+Proteus test because `async_delay_test.c` keeps all 4 slots busy — the very case
+that improved.
+
+The fix: `async_delay_tick()` declares **no locals at all** (counter increment,
+mask test, gate compare — all straight off the volatiles), and the register-hungry
+sweep lives in `_async_delay_tick_walk()`, called only when a slot is genuinely
+due. The trade is 2 extra `LDS` pairs (~8 cycles) on the loaded path in exchange
+for ~30 on every path.
+
+Consequence to preserve: the walk must read `_async_tick_counter` and
+`_async_active_mask` **once each into locals** at its top. Without that, the
+per-slot compares reload the volatiles every iteration and 004's win is undone.
+
+Generalize this: any future hot path in this codebase with an early return needs
+the same shape. Check the generated `.asm` for `__SAVELOCR` rather than assuming.
 
 ---
 

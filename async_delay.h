@@ -33,6 +33,9 @@
 //   ASYNC_DELAY_OPT_MERGED_FLAGS   - default 1. state+repeat in one byte.
 //   ASYNC_DELAY_OPT_UNROLL_TICK    - default 1. Compile-time slot indices.
 //   ASYNC_DELAY_OPT_NEXT_TARGET    - default 1. O(1) earliest-target gate.
+//   ASYNC_DELAY_OPT_SPLIT_TICK     - default 1. Keep the tick's fast path
+//                              local-free so CodeVisionAVR does not spill
+//                              registers on idle ticks.
 //   ASYNC_DELAY_OPT_SPLIT_ARRAYS   - default 0. Parallel arrays instead of a
 //                              struct (opt-in; measure before adopting).
 //
@@ -60,10 +63,11 @@
 //   many slots are running.
 //   Optimization flags: ASYNC_DELAY_OPT_BITMASK (1), ASYNC_DELAY_OPT_MERGED_FLAGS (1),
 //   ASYNC_DELAY_OPT_SPLIT_ARRAYS (0), ASYNC_DELAY_OPT_UNROLL_TICK (1),
-//   ASYNC_DELAY_OPT_NEXT_TARGET (1). Correctness flags:
+//   ASYNC_DELAY_OPT_NEXT_TARGET (1), ASYNC_DELAY_OPT_SPLIT_TICK (1).
+//   Correctness flags:
 //   ASYNC_DELAY_FIX_USED_MASK (1), ASYNC_DELAY_FIX_ATOMIC_MASK (1).
 //   Opt-in: ASYNC_DELAY_DEFERRED_CALLBACKS (0).
-//   See plans/003 and plans/004 for the full design.
+//   See plans/003, plans/004 and plans/005 for the full design.
 //
 // ============================================================
 // Quick Start:
@@ -228,6 +232,20 @@
 #define ASYNC_DELAY_OPT_NEXT_TARGET 1
 #endif
 
+// ASYNC_DELAY_OPT_SPLIT_TICK : 1 = async_delay_tick() keeps NO locals and the
+//                             slot walk lives in a separate function.
+//                             CodeVisionAVR spills register locals with
+//                             RCALL __SAVELOCR4 on entry and __LOADLOCR4 on
+//                             exit - ~30 cycles paid on EVERY tick, including
+//                             the idle ones that return three instructions
+//                             later. Pushing the locals into the callee means
+//                             that cost is only paid on ticks with real work.
+//                             0 = the single-function shape (locals hoisted,
+//                             walk inlined), for A/B measurement.
+#ifndef ASYNC_DELAY_OPT_SPLIT_TICK
+#define ASYNC_DELAY_OPT_SPLIT_TICK 1
+#endif
+
 // ASYNC_DELAY_DEFERRED_CALLBACKS : 1 = the ISR does NOT call callbacks; it sets
 //                             a bit in _async_pending_mask and the app drains
 //                             them from async_delay_poll() in MAIN context.
@@ -267,6 +285,9 @@
 #endif
 #if ASYNC_DELAY_DEFERRED_CALLBACKS && !ASYNC_DELAY_OPT_BITMASK
 #error "[async_delay] ASYNC_DELAY_DEFERRED_CALLBACKS requires ASYNC_DELAY_OPT_BITMASK=1."
+#endif
+#if ASYNC_DELAY_OPT_SPLIT_TICK && !ASYNC_DELAY_OPT_BITMASK
+#error "[async_delay] ASYNC_DELAY_OPT_SPLIT_TICK requires ASYNC_DELAY_OPT_BITMASK=1."
 #endif
 
 // ---------- Tick type based on TIMER_BITS ----------
@@ -757,13 +778,6 @@ static void _async_delay_expire_slot(unsigned char i, unsigned char clr)
 }
 
 #if ASYNC_DELAY_OPT_UNROLL_TICK
-// Set only when the next-target cache needs a recompute after this tick.
-#if ASYNC_DELAY_OPT_NEXT_TARGET
-#define _AD_MARK_FIRED()  _ad_fired = 1
-#else
-#define _AD_MARK_FIRED()
-#endif
-
 // Per-slot tick body. `n` MUST be a compile-time constant so that (1<<n),
 // ~(1<<n) and &_async_slots[n] all fold to literals / absolute addresses.
 // That is the entire point: with a runtime index CodeVisionAVR emits a call to
@@ -775,93 +789,158 @@ static void _async_delay_expire_slot(unsigned char i, unsigned char clr)
     if (_ad_m & (unsigned char)(1 << (n)))                                    \
     {                                                                         \
         if (_ASYNC_REACHED(_ad_now, _AD_TARGET(n)))                           \
-        {                                                                     \
             _async_delay_expire_slot((unsigned char)(n),                      \
                                      (unsigned char)~(1 << (n)));            \
-            _AD_MARK_FIRED();                                                 \
+    }
+
+// Slots above MAX_SLOTS expand to nothing, so the sweep below is one macro
+// regardless of slot count. Both tick shapes (SPLIT_TICK 1 and 0) use it, so
+// the A/B switch does not duplicate the body.
+#if ASYNC_DELAY_MAX_SLOTS > 1
+#define _AD_TICK_S1  _AD_TICK_SLOT(1)
+#else
+#define _AD_TICK_S1
+#endif
+#if ASYNC_DELAY_MAX_SLOTS > 2
+#define _AD_TICK_S2  _AD_TICK_SLOT(2)
+#else
+#define _AD_TICK_S2
+#endif
+#if ASYNC_DELAY_MAX_SLOTS > 3
+#define _AD_TICK_S3  _AD_TICK_SLOT(3)
+#else
+#define _AD_TICK_S3
+#endif
+#if ASYNC_DELAY_MAX_SLOTS > 4
+#define _AD_TICK_S4  _AD_TICK_SLOT(4)
+#else
+#define _AD_TICK_S4
+#endif
+#if ASYNC_DELAY_MAX_SLOTS > 5
+#define _AD_TICK_S5  _AD_TICK_SLOT(5)
+#else
+#define _AD_TICK_S5
+#endif
+#if ASYNC_DELAY_MAX_SLOTS > 6
+#define _AD_TICK_S6  _AD_TICK_SLOT(6)
+#else
+#define _AD_TICK_S6
+#endif
+#if ASYNC_DELAY_MAX_SLOTS > 7
+#define _AD_TICK_S7  _AD_TICK_SLOT(7)
+#else
+#define _AD_TICK_S7
+#endif
+
+#define _AD_TICK_SWEEP()                                                      \
+    _AD_TICK_SLOT(0)                                                          \
+    _AD_TICK_S1 _AD_TICK_S2 _AD_TICK_S3                                       \
+    _AD_TICK_S4 _AD_TICK_S5 _AD_TICK_S6 _AD_TICK_S7
+
+#else   /* !ASYNC_DELAY_OPT_UNROLL_TICK */
+
+// Runtime bit scan. Kept so the unroll can be A/B measured; this is the shape
+// that pays __LSLW12 + MUL + __GETW1P per slot.
+#define _AD_TICK_SWEEP()                                                      \
+    {                                                                         \
+        unsigned char i;                                                      \
+        for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)                           \
+        {                                                                     \
+            if (_ad_m & (unsigned char)(1 << i))                              \
+            {                                                                 \
+                if (_ASYNC_REACHED(_ad_now, _AD_TARGET(i)))                   \
+                    _async_delay_expire_slot(i,                               \
+                                             (unsigned char)~(1 << i));       \
+            }                                                                 \
         }                                                                     \
     }
 #endif
 
+// The recompute after a sweep is UNCONDITIONAL, not gated on "did something
+// fire". Reaching a sweep means _ASYNC_REACHED(now, _async_next_target) held,
+// and _async_next_target is always the exact minimum of the ACTIVE targets
+// (start() takes the min, cancel() recomputes, every sweep recomputes). So some
+// ACTIVE slot has target == _async_next_target and satisfies the same compare
+// -> at least one slot fired -> the cached minimum is always stale here.
+// This is a speed argument only; an unconditional recompute is correct either
+// way (it is O(N) and idempotent). Never make it conditional on anything
+// weaker than the above.
+#if ASYNC_DELAY_OPT_NEXT_TARGET
+#define _AD_TICK_AFTER_SWEEP()  _async_recompute_next()
+#else
+#define _AD_TICK_AFTER_SWEEP()
+#endif
+
+#if ASYNC_DELAY_OPT_BITMASK && ASYNC_DELAY_OPT_SPLIT_TICK
+// Walk the ACTIVE slots and expire the ones that are due.
+// Split out of async_delay_tick() deliberately: this is where the register
+// locals live, so CodeVisionAVR's __SAVELOCR spill is paid ONLY on the ticks
+// that have real work - not on every idle tick.
+// ISR context; interrupts are already off.
+static void _async_delay_tick_walk(void)
+{
+    async_tick_t  _ad_now;
+    unsigned char _ad_m;
+
+    // Read each volatile once. Without this the per-slot compares below would
+    // reload the counter with LDS/LDS every time (4 cycles x slot).
+    _ad_now = _async_tick_counter;
+    _ad_m   = _async_active_mask;
+
+    _AD_TICK_SWEEP();
+    _AD_TICK_AFTER_SWEEP();
+}
+#endif
+
 // MUST be called from timer ISR at exactly ASYNC_DELAY_TICK_HZ rate.
-// Increments tick counter, checks the active slots, fires callbacks.
+// Increments the tick counter, then gets out as fast as possible unless a slot
+// is actually due.
 // WARNING: Callbacks execute in ISR context - keep them very short!
 //          (unless ASYNC_DELAY_DEFERRED_CALLBACKS=1, see async_delay_poll)
 static void async_delay_tick(void)
 {
-#if ASYNC_DELAY_OPT_BITMASK
-    async_tick_t  _ad_now;
-    unsigned char _ad_m;
-#if ASYNC_DELAY_OPT_NEXT_TARGET
-    unsigned char _ad_fired;
-#endif
+#if ASYNC_DELAY_OPT_BITMASK && ASYNC_DELAY_OPT_SPLIT_TICK
+    // NO locals in this function, deliberately. CodeVisionAVR spills register
+    // locals with RCALL __SAVELOCR4 on entry and __LOADLOCR4 on exit - ~30
+    // cycles charged on EVERY tick, including the idle ones that return three
+    // instructions later. All the locals live in _async_delay_tick_walk().
 
     // Counter FIRST, always. Every early return below must not skip it or
     // delays drift whenever no slot happens to be active.
+    _async_tick_counter++;
+
+    if (_async_active_mask == 0)
+        return;                         // idle tick
+
+#if ASYNC_DELAY_OPT_NEXT_TARGET
+    // Nothing due yet: one wrap-safe compare and out, regardless of how many
+    // slots are active. This is what makes the tick O(1).
+    if (!_ASYNC_REACHED(_async_tick_counter, _async_next_target))
+        return;
+#endif
+
+    _async_delay_tick_walk();
+#elif ASYNC_DELAY_OPT_BITMASK
+    // SPLIT_TICK=0: single-function shape with the locals hoisted here, for
+    // A/B measurement against the split above. Same behavior, but the
+    // __SAVELOCR spill is charged to idle ticks too.
+    async_tick_t  _ad_now;
+    unsigned char _ad_m;
+
     _ad_now = (async_tick_t)(_async_tick_counter + 1);
     _async_tick_counter = _ad_now;
 
     _ad_m = _async_active_mask;
     if (_ad_m == 0)
-        return;                         // idle tick
+        return;
 
 #if ASYNC_DELAY_OPT_NEXT_TARGET
-    // Nothing is due yet: one wrap-safe compare and out, regardless of how
-    // many slots are active. This is what makes the tick O(1).
     if (!_ASYNC_REACHED(_ad_now, _async_next_target))
         return;
-    _ad_fired = 0;
 #endif
 
-#if ASYNC_DELAY_OPT_UNROLL_TICK
-    _AD_TICK_SLOT(0)
-#if ASYNC_DELAY_MAX_SLOTS > 1
-    _AD_TICK_SLOT(1)
-#endif
-#if ASYNC_DELAY_MAX_SLOTS > 2
-    _AD_TICK_SLOT(2)
-#endif
-#if ASYNC_DELAY_MAX_SLOTS > 3
-    _AD_TICK_SLOT(3)
-#endif
-#if ASYNC_DELAY_MAX_SLOTS > 4
-    _AD_TICK_SLOT(4)
-#endif
-#if ASYNC_DELAY_MAX_SLOTS > 5
-    _AD_TICK_SLOT(5)
-#endif
-#if ASYNC_DELAY_MAX_SLOTS > 6
-    _AD_TICK_SLOT(6)
-#endif
-#if ASYNC_DELAY_MAX_SLOTS > 7
-    _AD_TICK_SLOT(7)
-#endif
-#else
-    // Not unrolled: runtime bit scan. Kept so the unroll can be A/B measured.
-    {
-        unsigned char i;
-        for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)
-        {
-            if (_ad_m & (unsigned char)(1 << i))
-            {
-                if (_ASYNC_REACHED(_ad_now, _AD_TARGET(i)))
-                {
-                    _async_delay_expire_slot(i, (unsigned char)~(1 << i));
-#if ASYNC_DELAY_OPT_NEXT_TARGET
-                    _ad_fired = 1;
-#endif
-                }
-            }
-        }
-    }
-#endif
-
-#if ASYNC_DELAY_OPT_NEXT_TARGET
-    // Only on the rare ticks where something actually expired. Interrupts are
-    // already off (ISR context), which is what _async_recompute_next requires.
-    if (_ad_fired)
-        _async_recompute_next();
-#endif
+    _AD_TICK_SWEEP();
+    _AD_TICK_AFTER_SWEEP();
 #else
     // Legacy: full linear scan (behavior identical to before when all flags 0).
     unsigned char i;
