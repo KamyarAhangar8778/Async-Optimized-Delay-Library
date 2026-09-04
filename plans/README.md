@@ -18,7 +18,8 @@ row when done.
 | 001 | Fix self-rescheduling from callbacks (one-shot NO_SLOT, periodic dual-fire) | P1 | S | — | DONE |
 | 002 | Fix CPUClock mismatch in async_delay_test.cwp (16 vs 8 MHz) | P3 | S | — | DONE |
 | 003 | Optimize tick: active-slot bitmask + SoA + merged flags | P1 | M | — | DONE |
-| 004 | Fix two bitmask bugs + O(1) tick (unroll, next-target, deferred cb) | P0 | L | 003 | TODO |
+| 004 | Fix two bitmask bugs + O(1) tick (unroll, next-target, deferred cb) | P0 | L | 003 | DONE (Build 16 clean, Proteus OK; left an idle regression → 005) |
+| 005 | Remove the idle-tick register-spill regression 004 introduced | P1 | S | 004 | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 
@@ -29,6 +30,10 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
   the value fix takes effect whenever the wizard next writes `.cwp`.
 - 004 must run after 003 (it fixes two defects 003 introduced and rewrites the
   same hot path). It is P0 because two of its items are correctness bugs.
+- 005 exists only because 004's measurement found a regression it caused: three
+  register locals in `async_delay_tick()` made CodeVisionAVR emit
+  `RCALL __SAVELOCR4`/`__LOADLOCR4`, so the idle tick pays 30 cycles it did not
+  before (~88 → ~117). Everything else in 004 is a win; this is the cleanup.
 
 ## Findings considered and rejected
 
