@@ -23,11 +23,36 @@ timer ISR; the app either gets a callback or polls.
 | File | Role |
 |------|------|
 | `async_delay.h` | The library. Only file you normally edit. ~1000 lines (config-heavy; most of it is `#if` variants + comments). |
+| `README.md` | The **usage contract** — written so the library can be dropped into an unrelated project with this file as the only reference. Update it whenever the API, flags, or limits change. |
 | `async_delay_test.c` | Test project: ATmega8 @ 8MHz, Timer2 CTC 1ms tick, LCD + LEDs. |
 | `async_delay_guide.md` | Persian usage guide (timers, OCR tables, CodeWizard). Human-facing, lower priority for edits. |
 | `async_delay_test.prj` | CodeVisionAVR project file. |
 | `ARCHITECTURE.md` | This file. |
 | `CLAUDE.md` | Project rules (section 9). |
+| `plans/` | Numbered implementation plans with their measurements and rejected alternatives. `plans/README.md` is the index; read the relevant plan before re-touching an area it covers. |
+
+---
+
+## 2.1 Current state (2026-09-04, HEAD `7f8dfbf`)
+
+Plans 001–005 are all DONE and compiled clean. Measured on ATmega8 @ 8 MHz,
+`TIMER_BITS=16`, `MAX_SLOTS=4`, `TICK_HZ=1000`, default flags — cycle counts
+hand-derived from `Debug/List/async_delay_test.asm`, not hardware-timed:
+
+| Path | Pre-003 | Post-004 | Now (005) |
+|------|--------:|---------:|----------:|
+| idle tick (no slot active) | ~88 | ~117 | **~85** |
+| 4 active, none due | ~425 | ~135 | **~105** |
+| CPU @1 kHz, 4 active | 5.3 % | 1.7 % | **~1.3 %** |
+| CPU @10 kHz, 4 active | 53 % | 17 % | **~13 %** |
+| Flash (async functions) | 229 w | 362 w | **378 w** (~9 % of ATmega8) |
+| RAM | 31 B | 34 B | **34 B** |
+
+The one remaining lever is `ASYNC_DELAY_DEFERRED_CALLBACKS=1`: the ISR saves 11
+registers + SREG (~54 cycles/tick) purely because the tick may `ICALL` a user
+callback. Deferring callbacks to `async_delay_poll()` would cut idle to ~32
+cycles. It changes *when* callbacks run, so **do not flip the default without
+asking the user.**
 
 ---
 
@@ -37,7 +62,7 @@ timer ISR; the app either gets a callback or polls.
 |-------|---------|---------|------------|
 | `ASYNC_DELAY_TICK_HZ` | **none — required** | tick rate in Hz (e.g. 1000 = 1ms tick) | `#error` if undefined or == 0 |
 | `ASYNC_DELAY_TIMER_BITS` | `16` | tick counter width: 8 / 16 / 32 | `#error` if not one of these |
-| `ASYNC_DELAY_MAX_SLOTS` | `4` | max concurrent delays | `#error` if == 0 or > 254 (0xFF reserved); > 8 also `#error`s with any mask flag on |
+| `ASYNC_DELAY_MAX_SLOTS` | `4` | max concurrent delays | `#error` if == 0 or > 254; **but > 8 also `#error`s** because the masks are one byte, and every mask flag is on by default — so the practical ceiling is **8** unless you turn `OPT_BITMASK` off |
 | `ASYNC_DELAY_CALLBACK_RESCHEDULE` | `1` | slot made non-ACTIVE before its callback runs (plan 001) | — |
 | `ASYNC_DELAY_OPT_BITMASK` | `1` | tick visits only ACTIVE slots (plan 003) | `#error` if MAX_SLOTS > 8 |
 | `ASYNC_DELAY_OPT_MERGED_FLAGS` | `1` | state+repeat in one byte (plan 003) | — |
@@ -51,6 +76,13 @@ timer ISR; the app either gets a callback or polls.
 
 Flag effect: `TIMER_BITS` selects the type of `async_tick_t`
 (`unsigned char` / `unsigned int` / `unsigned long`).
+
+Verified-good combinations (checked by preprocessing the header for each and by
+the user's builds): all-defaults; each `OPT_*`/`FIX_*` individually at 0;
+`SPLIT_ARRAYS=1`; `MERGED_FLAGS=0`; `RESCHEDULE=0`; `DEFERRED=1` (alone and with
+`RESCHEDULE=0`); `BITMASK=0` full-legacy; `MAX_SLOTS` 1/4/5/8; `TIMER_BITS`
+8/16/32. Only all-defaults and `SPLIT_ARRAYS`-off have been compiled on
+hardware — the rest passed structural checks only.
 
 ---
 
@@ -81,10 +113,15 @@ Slot states: `ASYNC_SLOT_FREE (0)`, `ASYNC_SLOT_ACTIVE (1)`, `ASYNC_SLOT_EXPIRED
 Error code: `ASYNC_DELAY_NO_SLOT (0xFF)`.
 
 RAM at the default flags, MAX_SLOTS=4, TIMER_BITS=16: 28 (slots) + 2 (counter)
-+ 1 (active) + 1 (used) + 2 (next_target) = **34 bytes**.
++ 1 (active) + 1 (used) + 2 (next_target) = **34 bytes**. Confirmed against
+`Debug/List/async_delay_test.map`.
 
-All functions are `static` (header-only, avoids duplicate symbols); data is inside
-`#pragma used+` / `#pragma used-` so CodeVisionAVR keeps/emits it.
+All functions and data are `static` — header-only, so this avoids duplicate
+symbols if more than one translation unit includes it. Note the header does
+**not** use `#pragma used+`/`used-` (an earlier revision of this file claimed it
+did; it never appeared in the code). CodeVisionAVR emits the statics because
+they are referenced; if you ever add a static that is only touched from inline
+asm, that is when you would need the pragma.
 
 ---
 
@@ -303,12 +340,28 @@ the same shape. Check the generated `.asm` for `__SAVELOCR` rather than assuming
 | Slot overflow (5th start) | all 4 slots busy | returns `0xFF` |
 | `loop_count` (unsigned long) | main loop | proves loop is never blocked |
 
-There is no automated test harness (CodeVisionAVR IDE + hardware/Proteus only).
-Plan 004 added a throwaway Python model of the algorithm to run its 12 logic
-traces (mask transitions, wrap behavior, next-target invariant); it was deleted
-after use. If you change the tick, the masks, or `_ASYNC_REACHED`, rebuild that
-model rather than trusting a read-through — the traces caught the polarity
-questions that eyeballing does not.
+There is no automated test harness (CodeVisionAVR IDE + hardware/Proteus only,
+and `cvavrcl.exe` demands a license). What plans 004 and 005 actually did instead,
+and what you should do too:
+
+1. **A `#if` evaluator in Python** that preprocesses the header for ~19 flag
+   combinations and checks each surviving text for brace/paren balance, the C89
+   "no declaration after a statement" rule, `_ASYNC_SAVE_SREG`/`_REST_SREG`
+   pairing, and CodeVisionAVR keywords used as identifiers. This caught three
+   real compile errors before the one build attempt available, and would have
+   caught the `bit` keyword collision that cost a build cycle.
+2. **A Python model of the algorithm** (masks, wrap math, next-target invariant)
+   to run the logic traces: idle counting, one-shot, periodic phase-lock,
+   polling expiry, the BUG-1 steal scenario, self-reschedule, cancel-of-minimum,
+   counter wrap, `duration=0`, deferred callbacks, and split-vs-unsplit
+   equivalence. 17 traces at the end of 005.
+3. **An inverted test.** One trace turns `FIX_USED_MASK` off and asserts the bug
+   *reproduces*. Without that, a passing suite proves nothing about whether the
+   test can see the defect at all.
+
+Both scripts were throwaway and deleted after use. Rebuild them if you touch the
+tick, the masks, or `_ASYNC_REACHED` — the traces caught polarity questions that
+reading the code does not.
 
 ---
 
@@ -332,11 +385,28 @@ questions that eyeballing does not.
 - Match existing style: CodeVisionAVR C, 4-space indent, `//` comments,
   `(void *)0` for NULL, `#asm("cli")` inline asm. No `u`/`U` literal suffixes —
   the rest of the codebase and the CVAVR headers do not use them.
-- Declare all locals at the top of a function: CodeVisionAVR follows C89 block
-  rules, so a declaration after a statement is an error. When a local only
+- **Declare all locals at the top of a function.** CodeVisionAVR follows C89
+  block rules, so a declaration after a statement is an error. When a local only
   exists under some flag combination, wrap the declaration in the same `#if`.
+- **`bit` is a CodeVisionAVR type specifier, not a free identifier.** So are
+  `flash`, `eeprom`, `sfrb`, `sfrw`, `interrupt`, `funcused`. Naming a variable
+  `bit` produces "invalid combination of type specifiers" plus misleading
+  follow-on errors ("must declare first in block", "undefined symbol") on every
+  later line that touches it. This cost a build cycle in plan 004; the local is
+  now `slotbit` with a comment saying why.
+- **`#asm(...)` does not reliably survive macro expansion** in CVAVR. Write the
+  literal `#asm("cli")` at each call site and keep only the SREG save/restore in
+  macros (§6.3).
+- Multi-line `#define` continuations and nested `#if` inside a function body both
+  work fine — plan 004 expected trouble there and found none.
 - Surgical changes only; don't refactor unrelated lines.
 - Don't remove the atomic-read, wrap-safe, phase-locked-re-arm, or
   counter-increment-first logic (section 6) — all correctness-critical.
 - The user's mirror copy at `G:\Kaveh\CodeVsion\inc\async_delay.h` is what the
-  project actually compiles against. Never edit it; tell the user to copy.
+  project actually compiles against. Never edit it; tell the user to copy. Note
+  the user's IDE reformats that copy (typedefs un-indented, struct braces moved),
+  so its line numbers run ~2 off from this repo's — when they paste an error, map
+  the line rather than trusting it.
+- After changing the API, flags, or limits, update **`README.md`** as well. It is
+  the file that goes out with the library into other projects; a stale README is
+  worse than no README because it will be trusted.
