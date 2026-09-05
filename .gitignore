@@ -24,3 +24,9 @@ Release/
 
 # Simulation output (Proteus-generated files you don't want versioned)
 Simulation/
+
+# Host test build artifacts (tests/make_host.py generates a build/ tree)
+tests/build/
+
+# Python bytecode
+__pycache__/

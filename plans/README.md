@@ -20,7 +20,8 @@ row when done.
 | 003 | Optimize tick: active-slot bitmask + SoA + merged flags | P1 | M | — | DONE |
 | 004 | Fix two bitmask bugs + O(1) tick (unroll, next-target, deferred cb) | P0 | L | 003 | DONE (Build 16 clean, Proteus OK; idle regression handled by 005) |
 | 005 | Remove the idle-tick register-spill regression 004 introduced | P1 | S | 004 | DONE (build clean, Proteus OK; idle ~117 → ~85, below the pre-004 ~88) |
-| 006 | Host-side test harness + version marker (end the throwaway-script era) | P0 | M | 005 | TODO |
+| 006 | Host-side test harness + version marker (end the throwaway-script era) | P0 | M | 005 | DONE (16/18→17 valid combos green incl. TIMER_BITS=8, 3 probes reject, check_flags + mutation sanity green; version marker gate shared with 007 Phase 5) |
+| 007 | Fix `_ASYNC_HALF_RANGE` for TIMER_BITS=8 + re-enable the 8-bit combo | P1 | S | 006 | DONE (red reproduced T2 got=1 want=40 → fix → 17 combos + 21 static green; user gate: build clean, Proteus OK, `.map` 378 w / 34 B bit-identical; `ASYNC_DELAY_VERSION` = 7) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 
@@ -35,6 +36,11 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
   register locals in `async_delay_tick()` made CodeVisionAVR emit
   `RCALL __SAVELOCR4`/`__LOADLOCR4`, so the idle tick pays 30 cycles it did not
   before (~88 → ~117). Everything else in 004 is a win; this is the cleanup.
+- 007 must run after 006 (it uses the 006 harness for the red-green cycle and
+  inherits its baseline). It fixes the latent TIMER_BITS=8 bug the 006 harness
+  discovered; 006 stays IN PROGRESS until the version-marker mirror gate has
+  been through one full cycle — flipping 006 to DONE alongside 007's Phase 5
+  user gate is acceptable since both share that gate.
 
 ## Findings considered and rejected
 

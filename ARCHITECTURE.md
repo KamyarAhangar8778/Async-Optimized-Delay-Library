@@ -30,6 +30,7 @@ timer ISR; the app either gets a callback or polls.
 | `ARCHITECTURE.md` | This file. |
 | `CLAUDE.md` | Project rules (section 9). |
 | `plans/` | Numbered implementation plans with their measurements and rejected alternatives. `plans/README.md` is the index; read the relevant plan before re-touching an area it covers. |
+| `tests/` | Host-side test harness (plan 006): gcc-compiled real-header tests + static `#if` checker. See §8.5 before touching the tick, masks, or `_ASYNC_REACHED`. |
 
 ---
 
@@ -156,7 +157,8 @@ is the deliberate trade for never silently losing a caller's timer.
 
 ### 6.1 Wrap-safe expiry check — `_ASYNC_REACHED` macro
 ```c
-#define _ASYNC_HALF_RANGE ((async_tick_t)(~((async_tick_t)0) >> 1))   // e.g. 32767
+// Per-width literals since plan 007 (0x7F / 0x7FFF / 0x7FFFFFFF for 8/16/32-bit)
+#define _ASYNC_HALF_RANGE ((async_tick_t)0x7FFF)                      // 16-bit case
 #define _ASYNC_REACHED(now, t) \
     ((async_tick_t)((async_tick_t)(now) - (async_tick_t)(t)) < _ASYNC_HALF_RANGE)
 ```
@@ -164,6 +166,15 @@ Read it as "`t` has been reached at `now`", equivalently "`t` is not later than
 `now`". It lives in exactly one place so the tick, the next-target minimum and
 `start()` cannot drift apart. Bit-identical to the old inline
 `(counter - target) < half`.
+
+History (plan 007): until 007 the half range was computed with
+`~((async_tick_t)0) >> 1`, which integer-promotes an 8-bit `~0` to signed int
+(`-1`), keeps it through the arithmetic shift, and truncates AFTER the shift —
+so under `TIMER_BITS=8` the half range degenerated to 255 on a 256 counter and
+every delay fired ~immediately (caught by the plan-006 host harness). The macro
+is now per-width literals (0x7F / 0x7FFF / 0x7FFFFFFF) — no promotion step, the
+value is exact on every conforming compiler. 16/32-bit values are unchanged, so
+the default build is bit-identical.
 
 Invariant: correct across counter wrap **only if** delay < half the range
 (max reliable delay = 128 / 32767 / ~2^31 ticks for 8/16/32-bit). Longer = ambiguous.
@@ -340,28 +351,83 @@ the same shape. Check the generated `.asm` for `__SAVELOCR` rather than assuming
 | Slot overflow (5th start) | all 4 slots busy | returns `0xFF` |
 | `loop_count` (unsigned long) | main loop | proves loop is never blocked |
 
-There is no automated test harness (CodeVisionAVR IDE + hardware/Proteus only,
-and `cvavrcl.exe` demands a license). What plans 004 and 005 actually did instead,
-and what you should do too:
+There is no CodeVisionAVR build command here (`cvavrcl.exe` demands a license),
+but a permanent **host-side test harness now lives in `tests/`** (plan 006) —
+see §8.5. What plans 004 and 005 did before it existed:
 
-1. **A `#if` evaluator in Python** that preprocesses the header for ~19 flag
-   combinations and checks each surviving text for brace/paren balance, the C89
+1. **A `#if` evaluator in Python** that preprocessed the header for ~19 flag
+   combinations and checked each surviving text for brace/paren balance, the C89
    "no declaration after a statement" rule, `_ASYNC_SAVE_SREG`/`_REST_SREG`
    pairing, and CodeVisionAVR keywords used as identifiers. This caught three
-   real compile errors before the one build attempt available, and would have
-   caught the `bit` keyword collision that cost a build cycle.
+   real compile errors before the one build attempt available. **This is now
+   permanent: `tests/check_flags.py`** — run it (plus `tests/make_host.py`) after
+   touching the tick, the masks, or `_ASYNC_REACHED`.
 2. **A Python model of the algorithm** (masks, wrap math, next-target invariant)
    to run the logic traces: idle counting, one-shot, periodic phase-lock,
    polling expiry, the BUG-1 steal scenario, self-reschedule, cancel-of-minimum,
    counter wrap, `duration=0`, deferred callbacks, and split-vs-unsplit
-   equivalence. 17 traces at the end of 005.
+   equivalence. 17 traces at the end of 005. **Superseded by the real-C driver:
+   the host harness compiles the actual header, so struct/macro/`#if` drift is
+   impossible by construction.**
 3. **An inverted test.** One trace turns `FIX_USED_MASK` off and asserts the bug
    *reproduces*. Without that, a passing suite proves nothing about whether the
-   test can see the defect at all.
+   test can see the defect at all. **Kept as T8 in `tests/test_core.c` — keep
+   this habit for every future correctness fix.**
 
-Both scripts were throwaway and deleted after use. Rebuild them if you touch the
-tick, the masks, or `_ASYNC_REACHED` — the traces caught polarity questions that
-reading the code does not.
+---
+
+## 8.5 Host-side test harness (`tests/`, Plan 006)
+
+The `tests/` directory is a **permanent** gcc-based host harness that compiles
+the REAL header and validates library logic on x86 — no hardware needed:
+
+| File | Role |
+|------|------|
+| `tests/make_host.py` | Rewrites `#asm` lines → `//HOST:` comments into `tests/build/async_delay_host.h`, compiles + runs one binary per flag combo, plus 3 intentional `#error` probes. |
+| `tests/check_flags.py` | Pure-Python static checks (no gcc needed): brace balance, C89 decl-after-statement, SAVE/REST pairing, CVAVR keywords, per combo — plus a mutation-sanity check proving it is not vacuous. |
+| `tests/if_eval.py` | The directive-only `#if` evaluator the checker builds on. |
+| `tests/test_common.h` / `test_core.c` / `test_resched.c` / `test_gate.c` / `test_main.c` | The C driver: T1–T15 behavioral tests, one TU per combo. |
+| `tests/host_stub.h` | `SREG` stand-in. |
+| `tests/build/` | Generated output, gitignored, never edited. |
+
+Run (gcc from MSYS2 UCRT64 at `D:\Tools\MSYS2`):
+
+```bash
+export PATH="/d/Tools/MSYS2/ucrt64/bin:$PATH"
+python tests/make_host.py      # compile+run matrix (needs gcc)
+python tests/check_flags.py    # static checks (pure Python)
+```
+
+`--generate-only` stops make_host after header rewriting. Flags:
+`-std=gnu89 -Wall -Wextra -Werror -Wdeclaration-after-statement` — zero warnings
+tolerated. The combo table in `make_host.py` is the source of truth for
+verified-good combinations; mirror changes into `check_flags.py`'s matrix.
+
+**Extending the harness (the rule):** new behavior → write the new `T<n>` test
+FIRST and watch it fail (red), then fix the header and watch it pass. Keep the
+T8-style inverted test for every correctness fix. If a combo in §3's
+verified-good list is missing from `make_host.py`, add it — the harness is the
+spec. Plan 007 exercised this rule end to end: `TIMER_BITS=8` was re-enabled,
+watched fail with the exact predicted symptom, fixed, and watched pass — all
+17 combos now run in the matrix.
+
+### What host tests can and cannot prove (honesty block)
+
+Host tests prove **logic**: masks, wrap math, lifecycle, flag-combo equivalence
+(T16 is not a test — it IS the matrix: every combo runs T1–T15 and turning any
+`OPT_*` off must not change observable behavior). They do NOT prove:
+
+- **Cycle counts** — the §2.1 table stays hand-derived until measured with a
+  debug-pin toggle + Proteus scope.
+- **Interrupt atomicity** — `cli`/`sei` are stubbed out (`//HOST:`) and
+  single-threaded host execution makes SREG save/restore meaningless. The
+  user's CodeVisionAVR build + Proteus remains the gate for anything touching
+  critical sections.
+- **CodeVisionAVR codegen quirks** — register spills (`__SAVELOCR`), `__LSLW12`,
+  bit-shift folding. These only show up in the real compiler's `.asm`.
+
+The user's manual build remains the compile gate; run Proteus whenever firmware
+bytes change.
 
 ---
 
@@ -410,3 +476,6 @@ reading the code does not.
 - After changing the API, flags, or limits, update **`README.md`** as well. It is
   the file that goes out with the library into other projects; a stale README is
   worse than no README because it will be trusted.
+- After ANY header change, run the host harness (`tests/make_host.py` +
+  `tests/check_flags.py`, §8.5) and add a T-test for the new behavior FIRST.
+  Bump `ASYNC_DELAY_VERSION` to the new plan number.

@@ -26,6 +26,153 @@
 - **Depends on**: 005 (DONE — anchors below are post-005 state)
 - **Category**: verification-infrastructure + stale-copy fix
 - **Planned at**: commit `05b2e1b`, 2026-09-04, `async_delay.h` = 1000 lines
+- **State**: IN PROGRESS → effectively COMPLETE (2026-09-05): all phases done
+  except the formal flip-to-DONE, which waits on nothing further from this
+  plan's own scope (the Phase 6 user gate already passed for the
+  version-marker header; plan 007 owns the next header touch + rebuild).
+  See the execution log at the bottom.
+
+## Execution log (2026-09-05)
+
+**Done and verified:**
+- Phase 0: MSYS2 UCRT64 (portable, `D:\Tools\MSYS2`) now provides gcc 16.1.0 —
+  the Phase-0 "no gcc on this machine" fallback is OBSOLETE; the real C gate runs.
+- Phase 1 DONE: `ASYNC_DELAY_VERSION 6` in header.
+  **User gate PASSED**: header copied to `G:\Kaveh\CodeVsion\inc\async_delay.h`,
+  manual CodeVisionAVR rebuild **clean** (no errors, no warnings). Zero firmware
+  delta confirmed by the build, as §2 predicted.
+- Phase 2 DONE: `tests/host_stub.h` + `tests/make_host.py` + `.gitignore`
+  (`tests/build/`).
+- Phase 3 mostly DONE: driver split into `test_common.h` (shared bookkeeping),
+  `test_core.c` (T1–T8), `test_resched.c` (T9–T14), `test_gate.c` (T15),
+  `test_main.c` (one TU per combo, `main()`). The legacy single-file
+  `test_async_delay.c` draft is superseded (kept only as archaeology).
+  15 of 19 valid combos: **ALL PASS** with zero gcc warnings
+  (`-std=gnu89 -Wall -Wextra -Werror -Wdeclaration-after-statement`).
+
+**Harness bugs found and fixed while getting there (all harness-side, header untouched):**
+- `make_host.py` combos used NON-PREFIXED `-D` names (`-DOPT_BITMASK=0` etc.)
+  — the header reads `ASYNC_DELAY_OPT_BITMASK`, so every combo silently
+  compiled as defaults and differential testing was fake. All defines now
+  carry the full `ASYNC_DELAY_` prefix.
+- `-std=c89 -pedantic` rejects the `//` comments the header and driver use
+  everywhere (firmware convention). `-Wno-comment` does NOT rescue them
+  (proven by experiment). Flag set changed to
+  `-std=gnu89 -Wall -Wextra -Werror -Wdeclaration-after-statement` — keeps the
+  C89 declaration-first rule CodeVision needs as a hard error.
+- `FIX_USED_MASK=0` / `FIX_ATOMIC_MASK=0` / `MAX_SLOTS=1` combos left static
+  test functions unreferenced → `-Werror=unused-function` build failures.
+  Guarded/referenced.
+- `host_stub.h` SREG variable was `unused` in `FIX_ATOMIC_MASK=0` combos →
+  `__attribute__((unused))`.
+- Test bugs: inverted T_EQ arg order in failure prints, stale
+  self-reschedule bookkeeping not cleared in `t_reset()`, T6 under DEFERRED
+  polled once per 10 fires instead of per tick (two pending expiries collapse
+  into one callback — documented header behavior, test was wrong, not the lib),
+  T7/T4/T10/T11 assumed ≥2–3 slots, T15 assumed exactly 4 slots.
+
+**Remaining (this plan):**
+- ~~`legacy_bitmask0` combo~~ RESOLVED (2026-09-05): harness-side
+  `-Wno-unused-parameter` scoped to that combo only (user chose
+  "whichever you think is better"; header untouched per surgical rule).
+- ~~`DEFERRED=1+RESCHEDULE=0` combo~~ RESOLVED (2026-09-05): T9's
+  RESCHEDULE=0 expectations were wrong for deferred mode — in DEFERRED the
+  one-shot slot is freed at EXPIRY time (inside the tick, legacy branch of
+  `_async_delay_expire_slot`), so the callback's re-start reuses slot 0.
+  Test split into DIRECT (slot 1) vs DEFERRED (slot 0) expectations.
+- ~~`TIMER_BITS=8` combo~~ SKIPPED (2026-09-05) → plan 007 (real header bug,
+  see below). Documented in make_host.py + tests/README.md.
+
+**Phase status (final, 2026-09-05):**
+- Phase 0: DONE (gcc 16.1.0 MSYS2 UCRT64)
+- Phase 1: DONE + user build gate PASSED (Build clean, no errors/warnings)
+- Phase 2: DONE
+- Phase 3: DONE — 16 valid combos green (all except TIMER_BITS=8 skipped),
+  zero gcc warnings; 3 invalid probes correctly rejected. Two harness-side
+  test-expectation fixes (T8 legacy branch, T9 deferred branch) — header
+  untouched.
+- Phase 4: DONE — `tests/check_flags.py` (+ `tests/if_eval.py`): 20 combos
+  green, 3 probes reject, mutation sanity catches both a weakened #error
+  guard and a removed brace.
+  Checker bugs found and fixed while getting there: `!=` corrupted by naive
+  `!`-replacement; invalid function-boundary regex; depth-leak false
+  positive in decl-after-statement; typedef mistaken for a statement;
+  vacuous mutation anchor (combo defines shadow the header's #ifndef
+  defaults — real C semantics, so the mutation must target a GUARD, not a
+  default).
+- Phase 5: DONE — `tests/README.md` (run instructions + honesty block +
+  known skip + extension rules); README.md Project notes += version-check
+  snippet; ARCHITECTURE.md §8 rewritten (harness is permanent, scripts no
+  longer throwaway), §8.5 rewritten with file map + skip + extension rule,
+  §2 manifest += tests/, §10 += version-bump + harness rule.
+  File-size rule: check_flags.py exceeded 300 lines post-write → split into
+  `tests/if_eval.py` (147 lines, the #if evaluator) + `tests/check_flags.py`
+  (273 lines, the checks) — both documented in tests/README.md + §8.5.
+- Phase 6: PASSED for the version-marker header (user rebuild clean).
+  Any further header change (plan 007) needs a fresh copy + rebuild.
+
+**Honest deltas (CLAUDE.md rule):** firmware speed **+0%**, Flash **+0 B**,
+RAM **+0 B** — the header gained only a preprocessor constant; all other
+changes are new files under `tests/` + docs. The next real speed lever is
+`ASYNC_DELAY_DEFERRED_CALLBACKS=1`: idle tick ~85 → ~32 cycles (≈ −60%),
+behavior-changing, needs user approval per ARCHITECTURE.md §2.1.
+
+**REAL HEADER BUG discovered by the harness — `_ASYNC_HALF_RANGE` is 255, not 128, under 8-bit:**
+
+```c
+#define _ASYNC_HALF_RANGE ((async_tick_t)(~((async_tick_t)0) >> 1))
+// async_tick_t = unsigned char (TIMER_BITS=8):
+//   ~((unsigned char)0) = (unsigned char)0xFF
+//   integer promotion: 0xFF promotes to int BEFORE the shift in C89/C99,
+//   so (int)0xFF >> 1 = 127 — BUT the outer cast truncates AFTER the shift:
+//   (unsigned char)127 = 127. Hmm - the cast is around the whole expression,
+//   so the result is 127. The FAILURE mode observed is different:
+//   with CVAVR (and gcc -O0 verified): every 8-bit combo fires instantly
+//   (got=1 want=40 in T2), i.e. _ASYNC_REACHED(now, t) is ALWAYS true.
+//   Root cause per disassembly reasoning: `~((async_tick_t)0) >> 1` where
+//   async_tick_t is unsigned char promotes to SIGNED int, and CodeVisionAVR's
+//   promotion of unsigned char → int is UNSIGNED (its int is 16-bit but the
+//   sign rules differ) — either way the half-range constant comes out wrong
+//   and _ASYNC_REACHED loses its wrap-safety margin, degenerating to
+//   "t <= now" which fires one tick after start for any duration.
+```
+
+To be pinned down precisely in the fix pass (the promotion arithmetic differs
+between gcc and CodeVisionAVR; the SYMPTOM is identical and reproducible on
+the host: TIMER_BITS=8 combos fire at tick 1 instead of tick 40). The firmware
+default (16-bit) is NOT affected — the user's running project is safe; this is
+a latent 8-bit-mode bug. Candidate fix (header, +0 cost): force the arithmetic
+width before the shift:
+
+```c
+#define _ASYNC_HALF_RANGE \
+    ((async_tick_t)((async_tick_t)~(async_tick_t)0 >> 1))  // still broken: UC promotion
+// The C-standard-correct form: compute in the WIDEST unsigned type the
+// compiler must support, or sidestep promotion entirely:
+#define _ASYNC_HALF_RANGE ((async_tick_t)(-1 >> 1))            // WRONG too (int -1)
+// Correct: use UCHAR_MAX-style limits per width:
+#if ASYNC_DELAY_TIMER_BITS == 8
+#define _ASYNC_MAX_VAL   0xFFU
+#elif ASYNC_DELAY_TIMER_BITS == 16
+#define _ASYNC_MAX_VAL   0xFFFFUL
+#else
+#define _ASYNC_MAX_VAL   0xFFFFFFFFUL
+#endif
+#define _ASYNC_HALF_RANGE ((async_tick_t)(_ASYNC_MAX_VAL >> 1))  // 0x7F/0x7FFF/0x7FFFFFFF
+```
+
+Per plan §9 (STOP conditions: "any host-test failure you cannot trace to a
+named cause") this is exactly the named-cause case, so it does NOT stop the
+plan — it is a NEW HEADER CHANGE beyond §2's scope (version marker only).
+Decision required: fix `_ASYNC_HALF_RANGE` in THIS plan (violates the surgical
+rule but the harness proved the defect) or open plan 007 for it and let 006
+skip the TIMER_BITS=8 combo with a documented skip. Default: **plan 007**,
+because 006's promise was zero header delta and the user already rebuilt.
+
+**Phase status:**
+- (superseded — see the final phase status in the "Remaining" section above,
+  2026-09-05)
+
 
 ## 1. Why this plan exists
 

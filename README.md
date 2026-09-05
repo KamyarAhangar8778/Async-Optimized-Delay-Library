@@ -561,6 +561,19 @@ Rule: timing logic in `timer_mgr.c`, heavy logic in other files, communication o
 ## 📦 Project notes
 
 - **Header-only, everything `static`** — that is what makes the "only one .c file" rule unavoidable (pitfall 6, pattern 7).
+- **Version marker / stale-copy check** — the header defines `ASYNC_DELAY_VERSION`
+  (integer; current value **6** — always trust the `#define` in the header over this
+  text). It equals the number of the last plan that modified the header. If you keep a
+  copy of `async_delay.h` in another project, detect a stale copy at compile time:
+
+  ```c
+  #if ASYNC_DELAY_VERSION != 6
+  #error "async_delay.h copy is stale - copy the current header over and rebuild"
+  #endif
+  ```
+
+  Update the compared number whenever you update the header copy. Costs zero
+  Flash/RAM (preprocessor only).
 - **Size with defaults** (`TIMER_BITS=16`, `MAX_SLOTS=4`, `TICK_HZ=1000`) on ATmega8:
   **~34 bytes RAM**, **~378 words Flash** (library functions only, ~9% of ATmega8).
 - **RAM formula** (with `MERGED_FLAGS=1`): each slot is `2×sizeof(async_tick_t) + 3` bytes (e.g. 7 bytes in 16-bit mode),

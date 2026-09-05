@@ -128,6 +128,19 @@
 #ifndef _ASYNC_DELAY_INCLUDED_
 #define _ASYNC_DELAY_INCLUDED_
 
+// Library version: number of the last plan that modified this header.
+// The user compiles against a MIRROR copy (G:\Kaveh\CodeVsion\inc\async_delay.h),
+// not this repository file - comparing this one constant tells whether the mirror
+// is stale:
+//
+//     #if ASYNC_DELAY_VERSION != 6
+//     #error "async_delay.h mirror is stale - copy the repo header over and rebuild"
+//     #endif
+//
+// Bump by 1 in EVERY future plan that edits this header, and record the new value
+// in plans/README.md and README.md. Costs zero Flash/RAM (preprocessor only).
+#define ASYNC_DELAY_VERSION 7
+
 // ---------- Configuration validation ----------
 
 #ifndef ASYNC_DELAY_TICK_HZ
@@ -394,7 +407,21 @@ static volatile unsigned char _async_pending_mask;
 #endif
 
 // Half the tick range - compile-time constant (was recomputed every tick).
-#define _ASYNC_HALF_RANGE ((async_tick_t)(~((async_tick_t)0) >> 1))
+// LITERAL per-width constants, NOT `~((async_tick_t)0) >> 1`: with an 8-bit
+// async_tick_t the ~0 operand promotes to signed int, ~0 -> -1, the
+// arithmetic >> keeps -1, and the cast truncates it to 0xFF (255). A half
+// range of 255 on a 256 counter strips _ASYNC_REACHED of its wrap margin -
+// every delay fires ~immediately (found by the plan-006 host harness: T2
+// got=1 want=40 under TIMER_BITS=8). Literals have no promotion step, so the
+// value is exact on every compiler. 16-bit value unchanged (0x7FFF): the
+// default build is bit-identical.
+#if ASYNC_DELAY_TIMER_BITS == 8
+#define _ASYNC_HALF_RANGE ((async_tick_t)0x7F)         // 127
+#elif ASYNC_DELAY_TIMER_BITS == 16
+#define _ASYNC_HALF_RANGE ((async_tick_t)0x7FFF)       // 32767 (unchanged)
+#else /* 32 */
+#define _ASYNC_HALF_RANGE ((async_tick_t)0x7FFFFFFF)   // 2147483647 (unchanged)
+#endif
 
 // Wrap-safe "time `t` has been reached at time `now`".
 // Equivalently "t is not later than now". Bit-identical to the original
