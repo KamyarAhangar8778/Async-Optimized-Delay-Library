@@ -22,6 +22,7 @@ row when done.
 | 005 | Remove the idle-tick register-spill regression 004 introduced | P1 | S | 004 | DONE (build clean, Proteus OK; idle ~117 → ~85, below the pre-004 ~88) |
 | 006 | Host-side test harness + version marker (end the throwaway-script era) | P0 | M | 005 | DONE (16/18→17 valid combos green incl. TIMER_BITS=8, 3 probes reject, check_flags + mutation sanity green; version marker gate shared with 007 Phase 5) |
 | 007 | Fix `_ASYNC_HALF_RANGE` for TIMER_BITS=8 + re-enable the 8-bit combo | P1 | S | 006 | DONE (red reproduced T2 got=1 want=40 → fix → 17 combos + 21 static green; user gate: build clean, Proteus OK, `.map` 378 w / 34 B bit-identical; `ASYNC_DELAY_VERSION` = 7) |
+| 008 | Activate `DEFERRED_CALLBACKS=1` on the test project + measure the real ISR saving | P1 | S | 007 | DONE (DEFERRED=1 on test project: build clean, Proteus OK; `.map` 397w/35B (+19w/+1B); ISR idle +0% — CVAVR did not elide the spill, cost moved to poll(); host 17/21 green; header version 7 unchanged) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 

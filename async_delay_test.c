@@ -7,7 +7,8 @@ Clock frequency     : 8.000000 MHz (internal RC oscillator)
 
 Tests the async_delay library:
   - Timer2 CTC generates 1ms ticks
-  - LED on PB0 blinks every 500ms via callback
+  - LED on PB0 blinks every 500ms via DEFERRED callback (drained by
+    async_delay_poll() in the main loop - DEFERRED_CALLBACKS=1)
   - LED on PB1 blinks every 750ms via polling
   - Cancel test (2000ms delay cancelled early -> never fires)
   - Slot overflow test (5th start must return 0xFF)
@@ -23,6 +24,7 @@ Tests the async_delay library:
 #define ASYNC_DELAY_TIMER_BITS  16
 #define ASYNC_DELAY_MAX_SLOTS   4
 #define ASYNC_DELAY_TICK_HZ     1000   // 1ms tick
+#define ASYNC_DELAY_DEFERRED_CALLBACKS 1  // callbacks run from async_delay_poll() in main loop
 
 #include <async_delay.h>
 
@@ -38,7 +40,8 @@ static unsigned char test_cancel_failed = 0;
 static unsigned char test_overflow_done = 0;
 static unsigned long  loop_count = 0;      // 32-bit: never wraps at 60000
 
-// ---------- Callback: toggle LED0 flag (runs in ISR, keep short!) ----------
+// ---------- Callback: toggle LED0 flag (deferred: runs from async_delay_poll
+// in MAIN context, so it may do anything - still kept short as good practice) ----------
 void cb_led0_toggle(unsigned char slot_id)
 {
     (void)slot_id;       // parameter unused — silence warning
@@ -144,6 +147,8 @@ void main(void)
     // ========================================
     while (1)
     {
+        async_delay_poll();   // drain deferred callbacks (LED0) - MUST be first
+
         loop_count++;
 
         // ---- Apply LED0 state from callback ----

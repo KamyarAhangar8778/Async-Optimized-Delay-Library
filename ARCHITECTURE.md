@@ -34,26 +34,36 @@ timer ISR; the app either gets a callback or polls.
 
 ---
 
-## 2.1 Current state (2026-09-04, HEAD `7f8dfbf`)
+## 2.1 Current state (2026-09-05, HEAD `5b22bc9` + plan 008)
 
-Plans 001–005 are all DONE and compiled clean. Measured on ATmega8 @ 8 MHz,
-`TIMER_BITS=16`, `MAX_SLOTS=4`, `TICK_HZ=1000`, default flags — cycle counts
-hand-derived from `Debug/List/async_delay_test.asm`, not hardware-timed:
+Plans 001–008 are all DONE and compiled clean. Measured on ATmega8 @ 8 MHz,
+`TIMER_BITS=16`, `MAX_SLOTS=4`, `TICK_HZ=1000` — cycle counts hand-derived
+from `Debug/List/async_delay_test.asm`, not hardware-timed. Columns: default
+flags (005) vs `DEFERRED_CALLBACKS=1` (008, test project).
 
-| Path | Pre-003 | Post-004 | Now (005) |
-|------|--------:|---------:|----------:|
-| idle tick (no slot active) | ~88 | ~117 | **~85** |
-| 4 active, none due | ~425 | ~135 | **~105** |
-| CPU @1 kHz, 4 active | 5.3 % | 1.7 % | **~1.3 %** |
-| CPU @10 kHz, 4 active | 53 % | 17 % | **~13 %** |
-| Flash (async functions) | 229 w | 362 w | **378 w** (~9 % of ATmega8) |
-| RAM | 31 B | 34 B | **34 B** |
+| Path | Pre-003 | Post-004 | Now (005) | Now (008: DEFERRED=1) |
+|------|--------:|---------:|----------:|----------------------:|
+| idle tick (ISR, no slot active) | ~88 | ~117 | **~85** | **~85** |
+| 4 active, none due | ~425 | ~135 | **~105** | **~105** |
+| `async_delay_poll()` idle (main loop) | — | — | — | **~25** |
+| CPU @1 kHz, 4 active (ISR only) | 5.3 % | 1.7 % | **~1.3 %** | **~1.3 %** |
+| CPU @10 kHz, 4 active (ISR only) | 53 % | 17 % | **~13 %** | **~13 %** |
+| Flash (async functions) | 229 w | 362 w | **378 w** | **397 w** (+19 w) |
+| RAM | 31 B | 34 B | **34 B** | **35 B** (+1 B `pending_mask`) |
 
-The one remaining lever is `ASYNC_DELAY_DEFERRED_CALLBACKS=1`: the ISR saves 11
-registers + SREG (~54 cycles/tick) purely because the tick may `ICALL` a user
-callback. Deferring callbacks to `async_delay_poll()` would cut idle to ~32
-cycles. It changes *when* callbacks run, so **do not flip the default without
-asking the user.**
+**What 008 measured (honest):** the predicted idle cut ~85 → ~32 **did not
+materialize.** `Debug/List/async_delay_test.asm` after 008 still shows
+`_timer2_comp_isr` saving 11 registers + SREG on entry (`ST -Y,R0/R1/R15/
+R22-R27/R30/R31` + `IN/ST SREG`, ~25c in / ~29c out + `RETI`) and
+`_async_delay_tick_G000` is `NO locals` (no `__SAVELOCR`), exactly as in 005.
+`ICALL` moved out of the ISR — `_async_delay_expire_slot_G000` shrank
+75 → 53 w (−22 w) and `async_delay_poll_G000` appeared at 37 w — but CVAVR did
+**not** elide the ISR prologue. So ISR cost is **+0%**; the cost moved to
+`poll()` in the main loop (~25c when nothing pending, plus per-callback
+`ICALL`). Callbacks may now do anything (LCD, delay_ms) and that is the real
+win, not ISR cycles. `DEFERRED=1` remains opt-in per its contract
+(latency ≤ 1 loop, coalescing) — the test project now proves the firmware gate
+for that config (first real CV compile of DEFERRED).
 
 ---
 
@@ -344,7 +354,7 @@ the same shape. Check the generated `.asm` for `__SAVELOCR` rather than assuming
 
 | Test | Mode | Pass criterion |
 |------|------|----------------|
-| LED0 blink 500ms | periodic + callback | callback fires repeatedly from ISR |
+| LED0 blink 500ms | periodic + DEFERRED callback (plan 008) | callback fires repeatedly, drained by `async_delay_poll()` from the main loop |
 | LED1 blink 750ms | polling + `elapsed()` | poll in loop, slot freed + re-started |
 | Cancel 2000ms delay early | cancel | callback never fires |
 | LCD refresh / 200ms | polling | real-time pacing, loop not blocked |
