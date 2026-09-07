@@ -14,7 +14,9 @@ Release/
 *.sym3
 *.str1
 *.cci
+*.cbi
 *.fct
+*.txt
 
 # Editor backup files
 *.c~

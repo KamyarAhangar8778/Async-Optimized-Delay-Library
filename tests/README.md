@@ -66,8 +66,6 @@ T1–T15, so turning any `OPT_*` off must not change observable behavior.
   file-static, so each binary owns one library instance).
 - `build/` — generated, gitignored, never edited. Delete freely; regenerate
   by re-running the scripts.
-- `test_async_delay.c` — superseded single-file draft (T1–T9), kept only as
-  archaeology. Never compiled.
 
 ## 8-bit counter width (fixed by plan 007)
 

@@ -35,10 +35,6 @@ SRC    = os.path.join(ROOT, "async_delay.h")
 HOST_H = os.path.join(BUILD, "async_delay_host.h")
 STUB   = os.path.join(HERE, "host_stub.h")
 DRIVER = os.path.join(HERE, "test_main.c")
-# Legacy single-file driver (plan 006 draft, T1-T9 only, no main): superseded
-# by test_common.h + test_core.c + test_resched.c + test_gate.c + test_main.c.
-# Kept in-tree for the archaeology but NEVER compiled.
-LEGACY_DRIVER = os.path.join(HERE, "test_async_delay.c")
 
 # One strip per combo: (label, [extra defines as -DNAME=VALUE ...])
 # IMPORTANT: every flag the header reads is ASYNC_DELAY_-prefixed. A bare
