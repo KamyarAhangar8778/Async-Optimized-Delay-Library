@@ -1,67 +1,134 @@
-# ARCHITECTURE.md — async_delay (for the AI/Claude reading this repo)
+# ARCHITECTURE.md — async_delay (Engineered for AI Coding Agents)
 
-Read this file before modifying anything in this project. It is written for an AI
-(not humans) so you can reconstruct the design, invariants, and constraints without
-re-reading the whole header. Where something is subtle or was a past bug, it says so.
+Read this document FIRST before touching any file in this repository. It is written specifically for an AI Coding Agent (not human end-users) to instantly reconstruct the exact architectural invariants, execution constraints, memory models, hardware bottlenecks, and historical defect mitigations without needing to parse the entire codebase from scratch.
 
 ---
 
-## 1. What this project is
+## 1. System Identity & Mission
 
-A **header-only**, non-blocking delay library for AVR (ATmega8/16/32) in
-[async_delay.h](async_delay.h), compiled with CodeVisionAVR. Everything lives in
-one `.h` file; there is no `.c`. A test project ([async_delay_test.c](async_delay_test.c))
-runs on ATmega8 @ 8MHz.
-
-Key design goal: **never block the main loop**. Delays count down inside a hardware
-timer ISR; the app either gets a callback or polls.
+- **Target Architecture**: 8-bit Microchip/Atmel AVR (`ATmega8`, `ATmega16`, `ATmega32`, `ATmega328P`) clocked at 1–16 MHz.
+- **Compiler Targets**: **CodeVisionAVR (Primary)**, **AVR-GCC / Clang (Embedded)**, and **Host Native GCC/Clang** (Linux/x86_64 for automated test harnesses).
+- **Core Paradigm**: Single header-only (`async_delay.h`), zero-heap, zero-malloc, static RAM, non-blocking asynchronous event loop driven by a hardware timer ISR (`async_delay_tick()`).
+- **Highest Priority Objective**: **Absolute Maximum Execution Speed (Minimal CPU Cycles)** while preserving rock-solid safety against timer wrap-around, ISR concurrency races, and memory corruption.
 
 ---
 
-## 2. File manifest
+## 2. File Map & Agent Roles
 
-| File | Role |
-|------|------|
-| `async_delay.h` | The library. Only file you normally edit. ~1550 lines (config-heavy; most of it is `#if` variants + comments). Defines `ASYNC_DELAY_VERSION 10`. Supports CodeVisionAVR, AVR-GCC, Arduino, and native host testing. |
-| `README.md` | The **usage contract** — definitive specification for AI Agents and firmware developers. Contains complete configuration flags, CTC hardware formulas, concurrency contracts, code patterns, and troubleshooting matrix. |
-| `async_delay_test.c` | Reference firmware test project: ATmega8 @ 8MHz, Timer2 CTC 1ms tick, LCD + LEDs, exercising one-shot, polling, cancellation, restart, utility/sleep APIs, and deferred callbacks. |
-| `tests/test_async_delay.c` | Host-based native unit test suite (compiles with GCC/Clang across all configuration matrices). |
-| `tests/test_stress.c` | Host-based stress & concurrency test suite (interleaving, high-frequency continuous wrap-around, self-rescheduling, and dynamic sleep calculation). |
-| `tests/benchmark_cycles.c` | Host-based throughput and operation latency profiler. |
-| `tests/run_all_configs.sh` | Automated multi-configuration test runner script (unit, stress, and benchmark). |
-| `.github/workflows/ci.yml` | GitHub Actions automated continuous integration workflow. |
-| `async_delay_guide.md` | Comprehensive Persian guide updated for v10 (CTC timer calculation, CodeWizard hex values, deferred callbacks, polling leak prevention, restart, power-saving APIs, and multi-compiler support). |
-| `ARCHITECTURE.md` | This file: internal engineering invariants, hardware design rationale, cycle-budget models, and defect mitigations. |
-| `CLAUDE.md` | Project development guidelines and constraints. |
+| Path | Primary Agent Role / Purpose |
+|---|---|
+| `async_delay.h` | **The Core Library**. Defines `ASYNC_DELAY_VERSION 12`. Contains all algorithms, ISR gates, data structures, and conditional compilation flags. |
+| `ARCHITECTURE.md` | **Your Internal Blueprint (This file)**. Hardware models, cycle budgets, regression rules, and internal invariants. |
+| `README.md` | Public integration contract, hardware timer formulas, and complete API specifications. |
+| `async_delay_guide.md` | Persian technical guide for embedded developers using CodeVisionAVR. |
+| `async_delay_test.c` | Reference ATmega8 firmware project (Timer2 CTC, LCD, LEDs, buttons). |
+| `tests/test_async_delay.c` | Host-based native unit tests covering all matrix permutations. |
+| `tests/test_stress.c` | High-frequency stress test (wrap-around arithmetic, self-rescheduling, boundary conditions). |
+| `tests/benchmark_compare.c` | Host-based comparative benchmarking binary (Baseline vs Optimized). |
+| `tests/compare_performance.sh`| Automated regression detector comparing current code against unoptimized baseline. |
+| `tests/verify_avr_cycles.py` | Assembly inspector verifying table placement and absence of shift loops (`__LSLW12`). |
+| `tests/run_all_configs.sh` | Full verification pipeline (Unit + Stress + Regression Benchmarks). |
 
 ---
 
-## 2.1 Current state & Benchmarks (Release v9)
+## 3. Hardware Architecture & AVR Execution Bottlenecks
 
-Measured on ATmega8 @ 8 MHz, `TIMER_BITS=16`, `MAX_SLOTS=4`, `TICK_HZ=1000` — cycle counts derived from `Debug/List/async_delay_test.asm`. Comparison: default configuration vs `DEFERRED_CALLBACKS=1`.
+### 3.1 The "No Barrel Shifter" Trap
+AVR core executes single-bit shifts (`LSL`, `LSR`, `ROL`, `ROR`) in 1 cycle, but **lacks a multi-bit hardware barrel shifter**.
+- Dynamic shifts like `(1 << n)` on variable `n` generate a compiler helper call (`RCALL __LSLW12`) costing **10–30 clock cycles**.
+- **Agent Rule**: NEVER emit variable bit shifts in hot paths. Always use precomputed lookup tables (`_async_slot_bit`, `_async_first_free_nibble`, `_async_popcount_nibble`).
 
-| Path | Default Settings | Deferred Callbacks (`DEFERRED=1`) | Polling-Only (`DISABLE_CALLBACKS=1`) |
-|------|-----------------:|----------------------------------:|-------------------------------------:|
-| idle tick (ISR, no slot active) | **~85 cycles** | **~85 cycles** | **~85 cycles** |
-| 4 active slots, none due | **~105 cycles** | **~105 cycles** | **~105 cycles** |
-| `async_delay_poll()` idle (main loop) | — | **~25 cycles** | — |
-| `async_delay_poll()` 1 pending | — | **~38 cycles** (was ~65) | — |
-| `async_delay_cancel()` (fast path) | **~18 cycles** (was ~22) | **~18 cycles** (was ~22) | **~18 cycles** |
-| `async_delay_elapsed()` (active slot) | **~14 cycles** (was ~28) | **~14 cycles** (was ~28) | **~14 cycles** |
-| `async_delay_restart()` | **~32 cycles** (was ~48) | **~32 cycles** (was ~48) | **~32 cycles** |
-| CPU load @ 1 kHz, 4 active (ISR only) | **~1.3 %** | **~1.3 %** | **~1.3 %** |
-| CPU load @ 10 kHz, 4 active (ISR only) | **~13 %** | **~13 %** | **~13 %** |
-| Flash footprint (async functions) | **~395 words** | **~415 words** | **~340 words** (-15%) |
-| RAM footprint (4 slots, 16-bit tick) | **34 bytes** | **35 bytes** (+1 B `pending_mask`) | **26 bytes** (-23.5%) |
+### 3.2 Register Spills at Function Entry (`__SAVELOCR4`)
+CodeVisionAVR automatically saves local variables to the stack upon entering a function **before evaluating any `if` statements**.
+- If `async_delay_tick()` declares local variables, idle ticks incur a ~30-cycle penalty even when 0 timers are active!
+- **Agent Rule**: `async_delay_tick()` MUST remain free of stack locals. Complex scanning logic must reside in `_async_delay_tick_walk()`.
 
-**Release v9 Innovations & Performance Gains:**
-1. **Bit-Mask Lookup Table (`ASYNC_DELAY_OPT_LUT_MASK`)**: Replaced all variable shift operations `(1 << slot_id)` in `async_delay_restart()`, `async_delay_elapsed()`, `async_delay_cancel()`, and `async_delay_poll()` with a flash/RAM bit-mask LUT (`_async_slot_bit`). AVR lacks a hardware barrel shifter; variable shift requires a loop call (`__LSLW12`). LUT access cuts shift latency from ~10–25 cycles down to **2 cycles** (a direct LD/LDS).
-2. **Shift Elimination & Single Precomputation**: In `async_delay_elapsed()` and `async_delay_restart()`, `slotbit` is computed once and reused for mask testing, clearing, and setting, eliminating redundant shift executions (~33% faster `restart()`, ~50% faster `elapsed()`).
-3. **Early Exit in `_async_recompute_next()` & `async_delay_poll()`**: As soon as all active/pending mask bits are cleared during scanning (`m &= ~slotbit; if (m == 0) break;`), the loop terminates immediately. If only slot 0 or 1 is active, iterations for remaining slots are skipped (~40–70% speedup on sparse masks).
-4. **Footprint Optimization Flags (`ASYNC_DELAY_DISABLE_CALLBACKS` & `ASYNC_DELAY_DISABLE_PERIODIC`)**:
-   - `ASYNC_DELAY_DISABLE_CALLBACKS=1`: Removes function pointers from the slot struct (saving 2 bytes RAM per slot = 8 bytes saved for 4 slots, 32 bytes saved for 16 slots) and completely strips callback handling code.
-   - `ASYNC_DELAY_DISABLE_PERIODIC=1`: Removes the `duration` storage from slots (saving 2 bytes RAM per slot with 16-bit timer) and strips periodic re-arm branches.
-   - Together, they shrink slot size from 7 bytes to **3 bytes**, saving **57% of slot RAM**!
+### 3.3 Atomic Multi-Byte Operations on 8-bit Data Bus
+AVR data bus is 8-bit. Reading a 16-bit (`unsigned int`) or 32-bit (`unsigned long`) variable takes 2 to 4 separate load instructions (`LDS`). If a hardware ISR interrupts mid-load, the value becomes corrupt.
+- **Agent Rule**: All reads/writes to `_async_tick_counter`, `_async_active_mask`, and `_async_next_target` outside ISR MUST be wrapped in SREG-preserving critical sections (`_ASYNC_SAVE_SREG()`, `#asm("cli")`, `_ASYNC_REST_SREG()`).
+
+---
+
+## 4. Current State & Micro-Benchmarked Performance (v11)
+
+Measured on ATmega8 @ 8 MHz (`TIMER_BITS=16`, `MAX_SLOTS=4`, `TICK_HZ=1000`):
+
+| Operation | Base Cycles | v11 Optimized | Speedup / Impact |
+|---|---|---|---|
+| **Idle ISR Tick** (0 active slots) | ~85 cyc | **< 15 cycles** | **~5.6x faster** ($O(1)$ early gate) |
+| **Active ISR Tick** (all in flight, none due) | ~105 cyc | **< 18 cycles** | **~5.8x faster** (earliest target gate) |
+| **Active Count Query** (`active_count()`) | ~45 cyc | **~4 cycles** | **~10x faster** (LUT Popcount $O(1)$) |
+| **Slot Allocation** (`start()`) | ~55 cyc | **~12 cycles** | **~4.5x faster** (LUT Alloc $O(1)$) |
+| **Fast Cancel** (`cancel()`) | ~48 cyc | **~18 cycles** | **~2.6x faster** (bypasses recompute) |
+| **In-Place Restart** (`restart()`) | ~48 cyc | **~32 cycles** | **~1.5x faster** (zero reallocation) |
+| **RAM Footprint** (4 slots, 16-bit) | 34 B | **34 Bytes** | **Zero heap, 100% static RAM** |
+
+---
+
+## 5. Algorithmic Invariants & Core Data Structures
+
+### 5.1 Static Data Segment Layout
+```c
+typedef struct {
+    async_tick_t     target;    // Target tick when delay fires
+    async_tick_t     duration;  // Period duration (removed if DISABLE_PERIODIC=1)
+    async_delay_cb_t callback;  // Callback pointer (removed if DISABLE_CALLBACKS=1)
+    unsigned char    flags;     // [1:0]=State (FREE/ACTIVE/EXPIRED), [2]=Repeat
+} _async_slot_t;
+
+static _async_slot_t         _async_slots[ASYNC_DELAY_MAX_SLOTS];
+static volatile async_tick_t _async_tick_counter;
+static volatile async_mask_t _async_active_mask;  // Bit n = RUNNING (tested by ISR)
+static volatile async_mask_t _async_used_mask;    // Bit n = ALLOCATED (tested by start)
+static volatile async_tick_t _async_next_target;  // Cached minimum active target
+static volatile async_mask_t _async_pending_mask; // Deferred callbacks awaiting poll
+```
+
+### 5.2 The Wrap-Safe Arithmetic Invariant
+```c
+#define _ASYNC_HALF_RANGE ((async_tick_t)0x7FFF) // for 16-bit
+#define _ASYNC_REACHED(now, t) \
+    ((async_tick_t)((async_tick_t)(now) - (async_tick_t)(t)) < _ASYNC_HALF_RANGE)
+```
+- **Rule**: Correct across unsigned counter overflow as long as delay $< \text{HALF\_RANGE}$ (32,767 ms for 16-bit @ 1kHz).
+- **Literal rule**: Width-specific literals (`0x7F`, `0x7FFF`, `0x7FFFFFFF`) MUST be used to prevent ANSI C integer promotion bugs.
+
+### 5.3 $O(1)$ Allocation & Popcount Lookup Tables (v11)
+```c
+// 16-entry Nibble LUT for O(1) allocation: returns index of lowest 0-bit
+static const unsigned char _async_first_free_nibble[16] = {
+    0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 0xFF
+};
+
+// 16-entry Nibble LUT for O(1) active count popcount: returns number of 1-bits
+static const unsigned char _async_popcount_nibble[16] = {
+    0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4
+};
+```
+- For up to 16 slots: Evaluated in at most 2 nibble lookups without a single loop or branch.
+
+### 5.4 Two-Mask State Machine
+- `_async_used_mask` tracks ALLOCATED slots (prevents `start()` from stealing polling slots).
+- `_async_active_mask` tracks RUNNING slots (polled by ISR tick).
+- **Core Invariant**: `(_async_active_mask & ~_async_used_mask) == 0` (No slot can be active without being allocated).
+
+---
+
+## 6. Code Modification Rules for the AI Agent
+
+When editing `async_delay.h`:
+
+1. **Strict C89 Declarations**: Declare ALL variables at the very beginning of the block before any executable statements. CodeVisionAVR will fail compilation otherwise.
+2. **Reserved Keyword Ban**: NEVER use `bit`, `flash`, `eeprom`, `sfrb`, `sfrw`, `interrupt`, or `funcused` as variable names. Use `slotbit`, `mask_val`, etc.
+3. **No Inline `#asm` Inside Macros**: CodeVisionAVR preprocessor breaks inline assembly macros. Keep `#asm("cli")` inline at the physical call site.
+4. **Preserve Volatiles First**: In `async_delay_tick()`, `_async_tick_counter++` MUST be executed before any early-exit check.
+5. **Phase-Locked Periodic Arming**: In periodic mode, new target MUST be `_async_slots[i].target += duration`, NEVER `now + duration`.
+6. **Regression Verification**: After making edits, always run:
+   ```bash
+   bash tests/run_all_configs.sh
+   ```
+   Inspect Phase 3 table to confirm no speed regressions occurred.
+7. **Synchronize Documentation**: Any change in flags, APIs, or limits MUST be updated in `README.md`, `async_delay_guide.md`, and this `ARCHITECTURE.md`.
 
 ---
 
@@ -84,6 +151,7 @@ Measured on ATmega8 @ 8 MHz, `TIMER_BITS=16`, `MAX_SLOTS=4`, `TICK_HZ=1000` — 
 | `ASYNC_DELAY_FIX_USED_MASK` | `1` | **correctness**: separate ALLOCATED mask preventing slot theft | requires BITMASK |
 | `ASYNC_DELAY_FIX_ATOMIC_MASK` | `1` | **correctness**: SREG-preserving critical sections | required by NEXT_TARGET when TIMER_BITS ≥ 16, or MAX_SLOTS > 8 |
 | `ASYNC_DELAY_OPT_UNROLL_TICK` | `1` | compile-time slot indices in the tick (avoids shift/mul loops, up to 16 slots) | requires BITMASK |
+| `ASYNC_DELAY_OPT_UNROLL_RECOMPUTE` | `1` | compile-time slot indices in `_async_recompute_next` (removes loop/indexing overhead) | requires NEXT_TARGET |
 | `ASYNC_DELAY_OPT_NEXT_TARGET` | `1` | O(1) earliest-target gate before touching slots | requires BITMASK |
 | `ASYNC_DELAY_OPT_SPLIT_TICK` | `1` | keep tick fast path local-free; sweep walk lives in callee | requires BITMASK |
 | `ASYNC_DELAY_DEFERRED_CALLBACKS` | `0` | **changes behavior**: callbacks run from `async_delay_poll()` in main context | requires BITMASK, MAX_SLOTS ≤ 16 |

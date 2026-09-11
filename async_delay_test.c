@@ -22,32 +22,32 @@ Tests the async_delay library:
 #include <delay.h>
 
 // ---------- async_delay configuration ----------
-#define ASYNC_DELAY_TIMER_BITS  16
-#define ASYNC_DELAY_MAX_SLOTS   4
-#define ASYNC_DELAY_TICK_HZ     1000   // 1ms tick
-#define ASYNC_DELAY_DEFERRED_CALLBACKS 1  // callbacks run from async_delay_poll() in main loop
+#define ASYNC_DELAY_TIMER_BITS 16
+#define ASYNC_DELAY_MAX_SLOTS 4
+#define ASYNC_DELAY_TICK_HZ 1000         // 1ms tick
+#define ASYNC_DELAY_DEFERRED_CALLBACKS 1 // callbacks run from async_delay_poll() in main loop
 
 #include <async_delay.h>
 
 // Timer2 at 8 MHz: prescaler /64 -> timer clock = 125 kHz
 // 1 ms = 125 ticks -> OCR2 = 125 - 1 = 124
-#define OCR2_1MS  124
+#define OCR2_1MS 124
 
 // ---------- Test state variables ----------
-static unsigned char led0_toggle = 0;      // set by callback (PB0)
-static unsigned char led1_toggle = 0;      // set by polling (PB1)
+static unsigned char led0_toggle = 0; // set by callback (PB0)
+static unsigned char led1_toggle = 0; // set by polling (PB1)
 static unsigned char test_cancel_done = 0;
 static unsigned char test_cancel_failed = 0;
 static unsigned char test_restart_done = 0;
 static unsigned char test_util_done = 0;
 static unsigned char test_overflow_done = 0;
-static unsigned long  loop_count = 0;      // 32-bit: never wraps at 60000
+static unsigned long loop_count = 0; // 32-bit: never wraps at 60000
 
 // ---------- Callback: toggle LED0 flag (deferred: runs from async_delay_poll
 // in MAIN context, so it may do anything - still kept short as good practice) ----------
 void cb_led0_toggle(unsigned char slot_id)
 {
-    (void)slot_id;       // parameter unused — silence warning
+    (void)slot_id; // parameter unused � silence warning
     led0_toggle ^= 1;
 }
 
@@ -55,7 +55,7 @@ void cb_led0_toggle(unsigned char slot_id)
 void cb_should_not_fire(unsigned char slot_id)
 {
     // Just set a flag - do NOT touch the LCD from an ISR
-    (void)slot_id;       // parameter unused — silence warning
+    (void)slot_id; // parameter unused � silence warning
     test_cancel_failed = 1;
 }
 
@@ -64,16 +64,22 @@ void ulong_to_str(unsigned long val, char *buf)
 {
     unsigned char i, n = 0;
     char tmp[11];
-    do { tmp[n++] = '0' + (val % 10); val /= 10; } while (val);
-    for (i = 0; i < 10 - n; i++) buf[i] = ' ';
-    for (i = 0; i < n; i++) buf[10 - n + i] = tmp[n - 1 - i];
+    do
+    {
+        tmp[n++] = '0' + (val % 10);
+        val /= 10;
+    } while (val);
+    for (i = 0; i < 10 - n; i++)
+        buf[i] = ' ';
+    for (i = 0; i < n; i++)
+        buf[10 - n + i] = tmp[n - 1 - i];
     buf[10] = '\0';
 }
 
 // ============================================================
 // Timer2 Compare Match ISR - generates 1ms ticks
 // ============================================================
-interrupt [TIM2_COMP] void timer2_comp_isr(void)
+interrupt[TIM2_COMP] void timer2_comp_isr(void)
 {
     async_delay_tick();
 }
@@ -92,12 +98,12 @@ void main(void)
     // ---- Timer2 init: CTC mode, 1ms interrupt ----
     // 8 MHz / 64 = 125 kHz, OCR2 = 124 -> period = 1ms
     ASSR = 0x00;
-    TCCR2 = (1 << WGM21)                          // CTC mode
-          | (0 << COM21) | (0 << COM20)           // OC2 disconnected
-          | (1 << CS22) | (0 << CS21) | (0 << CS20);  // prescaler /64
+    TCCR2 = (1 << WGM21)                               // CTC mode
+            | (0 << COM21) | (0 << COM20)              // OC2 disconnected
+            | (1 << CS22) | (0 << CS21) | (0 << CS20); // prescaler /64
     TCNT2 = 0x00;
-    OCR2  = OCR2_1MS;
-    TIMSK |= (1 << OCIE2);                        // enable Timer2 compare ISR
+    OCR2 = OCR2_1MS;
+    TIMSK |= (1 << OCIE2); // enable Timer2 compare ISR
 
     // ---- LCD init + boot banner ----
     lcd_init(16);
@@ -114,8 +120,8 @@ void main(void)
     // ---- Initialize async_delay ----
     async_delay_init();
 
-    // Enable global interrupts AFTER all init
-    #asm("sei")
+// Enable global interrupts AFTER all init
+#asm("sei")
 
     // ========================================
     // TEST 1: Periodic callback mode - LED0 toggles every 500ms
@@ -142,16 +148,16 @@ void main(void)
     // ========================================
     id_fail = async_delay_start(100, (void *)0);
     if (id_fail == ASYNC_DELAY_NO_SLOT)
-        test_overflow_done = 1;   // PASS
+        test_overflow_done = 1; // PASS
     else
-        test_overflow_done = 2;   // FAIL
+        test_overflow_done = 2; // FAIL
 
     // ========================================
     // Main loop - NON-BLOCKING, runs freely
     // ========================================
     while (1)
     {
-        async_delay_poll();   // drain deferred callbacks (LED0) - MUST be first
+        async_delay_poll(); // drain deferred callbacks (LED0) - MUST be first
 
         loop_count++;
 
@@ -192,9 +198,9 @@ void main(void)
             unsigned char u_act, u_cnt;
             async_tick_t u_rem, u_next;
 
-            u_act  = async_delay_is_active(id_poll);
-            u_cnt  = async_delay_active_count();
-            u_rem  = async_delay_remaining(id_poll);
+            u_act = async_delay_is_active(id_poll);
+            u_cnt = async_delay_active_count();
+            u_rem = async_delay_remaining(id_poll);
             u_next = async_delay_ticks_until_next();
 
             if (u_act == 1 && u_cnt >= 1 && u_rem > 0 && u_next > 0)
@@ -211,7 +217,7 @@ void main(void)
             lcd_gotoxy(0, 0);
             lcd_putsf("L:");
             ulong_to_str(loop_count, num_buf);
-            lcd_puts(num_buf + 3);  // 7 chars of loop count
+            lcd_puts(num_buf + 3); // 7 chars of loop count
             if (test_util_done == 1)
                 lcd_putsf(" U:OK");
             else if (test_util_done == 2)

@@ -3,7 +3,7 @@
 `async_delay.h` is a high-performance, header-only, non-blocking asynchronous timer library designed for 8-bit AVR microcontrollers (**ATmega8 / ATmega16 / ATmega32**) and Arduino environments, compiled with **CodeVisionAVR**, **AVR-GCC**, or natively tested with **GCC / Clang** on host systems.
 
 > **Contract for AI Agents & Firmware Engineers:**
-> This document is the definitive integration specification for `async_delay.h` (v10). When incorporating this library into any project, all necessary configuration macros, hardware timer formulas, concurrency constraints, API contracts, CodeVisionAVR quirks, and verified implementation patterns are fully detailed below.
+> This document is the definitive integration specification for `async_delay.h` (v12). When incorporating this library into any project, all necessary configuration macros, hardware timer formulas, concurrency constraints, API contracts, CodeVisionAVR quirks, and verified implementation patterns are fully detailed below.
 
 ---
 
@@ -89,6 +89,8 @@ All settings are configured via preprocessor `#define` directives prior to `#inc
 | `ASYNC_DELAY_FIX_ATOMIC_MASK` | `1` | Concurrency | Protects main-context mask updates with an SREG-preserving critical section (`#asm("cli")`). |
 | `ASYNC_DELAY_OPT_BITMASK` | `1` | Performance | Restricts tick inspections to active slots via bitmask (supports up to 16 slots). |
 | `ASYNC_DELAY_OPT_LUT_MASK` | `1` | Performance | Precomputed bitmask lookup table (`_async_slot_bit`) eliminating AVR `__LSLW12` runtime shift loops. |
+| `ASYNC_DELAY_OPT_LUT_ALLOC` | `1` | Performance | Nibble lookup table (`_async_first_free_nibble`) for $O(1)$ loop-free slot search during allocation. |
+| `ASYNC_DELAY_OPT_LUT_POPCOUNT` | `1` | Performance | Nibble popcount lookup table (`_async_popcount_nibble`) for $O(1)$ instant active slot count query. |
 | `ASYNC_DELAY_DISABLE_CALLBACKS` | `0` | Footprint | Polling-only mode. Removes callback pointer from struct, saving 2 bytes RAM per slot (23.5% total RAM reduction for 4 slots). |
 | `ASYNC_DELAY_DISABLE_PERIODIC` | `0` | Footprint | One-shot only mode. Removes duration field from struct, saving 2 bytes RAM per slot. |
 | `ASYNC_DELAY_OPT_NEXT_TARGET` | `1` | Performance | Caches earliest target; enables $O(1)$ early exit in `async_delay_tick()` when no slots are due. |

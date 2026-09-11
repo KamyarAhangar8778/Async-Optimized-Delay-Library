@@ -49,9 +49,8 @@ run_stress "Stress - 8-bit Timer, 8 slots" -DASYNC_DELAY_TIMER_BITS=8 -DASYNC_DE
 run_stress "Stress - 32-bit Timer, 16 slots" -DASYNC_DELAY_TIMER_BITS=32 -DASYNC_DELAY_MAX_SLOTS=16
 run_stress "Stress - Deferred Callbacks" -DASYNC_DELAY_DEFERRED_CALLBACKS=1
 
-echo -e "\n>>> Phase 3: Performance & Throughput Benchmark <<<"
-gcc -Wall -Wextra -Wno-unused-function -O2 -I. tests/benchmark_cycles.c -o tests/bench_bin
-./tests/bench_bin
+echo -e "\n>>> Phase 3: Performance & Optimization Differential Report <<<"
+bash tests/compare_performance.sh
 
 rm -f tests/runner_bin tests/stress_bin tests/bench_bin tests/run_test
 

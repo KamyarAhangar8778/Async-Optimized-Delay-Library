@@ -315,6 +315,45 @@ static void test_lut_bitmask(void)
     }
 }
 
+// -------------------------------------------------------------
+// Test 10: O(1) LUT Allocator & Popcount Correctness
+// -------------------------------------------------------------
+static void test_lut_alloc_and_popcount(void)
+{
+    unsigned char id0, id1, id2, id3;
+    printf("Running test_lut_alloc_and_popcount...\n");
+    async_delay_init();
+
+    TEST_ASSERT(async_delay_active_count() == 0, "popcount 0 on empty");
+
+    id0 = async_delay_start(100, (void *)0);
+    TEST_ASSERT(id0 == 0, "first allocated slot is 0");
+    TEST_ASSERT(async_delay_active_count() == 1, "popcount is 1");
+
+#if ASYNC_DELAY_MAX_SLOTS >= 2
+    id1 = async_delay_start(100, (void *)0);
+    TEST_ASSERT(id1 == 1, "second allocated slot is 1");
+    TEST_ASSERT(async_delay_active_count() == 2, "popcount is 2");
+#endif
+
+#if ASYNC_DELAY_MAX_SLOTS >= 4
+    id2 = async_delay_start(100, (void *)0);
+    id3 = async_delay_start(100, (void *)0);
+    TEST_ASSERT(id2 == 2 && id3 == 3, "allocated slots 2 and 3");
+    TEST_ASSERT(async_delay_active_count() == 4, "popcount is 4");
+
+    // Free slot 1, next allocation must reuse slot 1 in O(1)
+    async_delay_cancel(id1);
+    TEST_ASSERT(async_delay_active_count() == 3, "popcount is 3 after cancel slot 1");
+    id1 = async_delay_start(100, (void *)0);
+    TEST_ASSERT(id1 == 1, "LUT allocator immediately reused freed slot 1");
+    TEST_ASSERT(async_delay_active_count() == 4, "popcount back to 4");
+#endif
+
+    async_delay_cancel_all();
+    TEST_ASSERT(async_delay_active_count() == 0, "popcount 0 after cancel all");
+}
+
 // =============================================================
 int main(void)
 {
@@ -339,6 +378,7 @@ int main(void)
     test_counter_wrap();
     test_slot_exhaustion();
     test_lut_bitmask();
+    test_lut_alloc_and_popcount();
 
     printf("\n----------------------------------------\n");
     printf("Tests Run: %d | Passed: %d | Failed: %d\n",
