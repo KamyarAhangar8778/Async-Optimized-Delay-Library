@@ -32,3 +32,8 @@ tests/build/
 
 # Python bytecode
 __pycache__/
+
+# Environment & Node artifacts
+.env
+node_modules/
+dist/

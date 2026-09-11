@@ -22,10 +22,15 @@ timer ISR; the app either gets a callback or polls.
 
 | File | Role |
 |------|------|
-| `async_delay.h` | The library. Only file you normally edit. ~1300 lines (config-heavy; most of it is `#if` variants + comments). Defines `ASYNC_DELAY_VERSION 9`. |
+| `async_delay.h` | The library. Only file you normally edit. ~1550 lines (config-heavy; most of it is `#if` variants + comments). Defines `ASYNC_DELAY_VERSION 10`. Supports CodeVisionAVR, AVR-GCC, Arduino, and native host testing. |
 | `README.md` | The **usage contract** — definitive specification for AI Agents and firmware developers. Contains complete configuration flags, CTC hardware formulas, concurrency contracts, code patterns, and troubleshooting matrix. |
-| `async_delay_test.c` | Reference firmware test project: ATmega8 @ 8MHz, Timer2 CTC 1ms tick, LCD + LEDs, exercising one-shot, polling, cancellation, restart, and deferred callbacks. |
-| `async_delay_guide.md` | Comprehensive Persian guide updated for v9 (CTC timer calculation, CodeWizard hex values, deferred callbacks, polling leak prevention, restart, 16-slot support, and multi-file architecture). |
+| `async_delay_test.c` | Reference firmware test project: ATmega8 @ 8MHz, Timer2 CTC 1ms tick, LCD + LEDs, exercising one-shot, polling, cancellation, restart, utility/sleep APIs, and deferred callbacks. |
+| `tests/test_async_delay.c` | Host-based native unit test suite (compiles with GCC/Clang across all configuration matrices). |
+| `tests/test_stress.c` | Host-based stress & concurrency test suite (interleaving, high-frequency continuous wrap-around, self-rescheduling, and dynamic sleep calculation). |
+| `tests/benchmark_cycles.c` | Host-based throughput and operation latency profiler. |
+| `tests/run_all_configs.sh` | Automated multi-configuration test runner script (unit, stress, and benchmark). |
+| `.github/workflows/ci.yml` | GitHub Actions automated continuous integration workflow. |
+| `async_delay_guide.md` | Comprehensive Persian guide updated for v10 (CTC timer calculation, CodeWizard hex values, deferred callbacks, polling leak prevention, restart, power-saving APIs, and multi-compiler support). |
 | `ARCHITECTURE.md` | This file: internal engineering invariants, hardware design rationale, cycle-budget models, and defect mitigations. |
 | `CLAUDE.md` | Project development guidelines and constraints. |
 
@@ -402,9 +407,32 @@ The allocation loop now maintains `slotbit = 1` and shifts `slotbit <<= 1` on ea
 | LED0 blink 500ms | periodic + DEFERRED callback | callback fires repeatedly, drained by `async_delay_poll()` from the main loop |
 | LED1 blink 750ms | polling + `elapsed()` | poll in loop, slot freed + re-started |
 | Cancel 2000ms delay early | cancel | callback never fires |
+| Restart in-place (300ms) | `async_delay_restart` | retargets active slot in-place, fails safely on free slot |
+| Power-saving & Utility | `is_active`, `active_count`, `remaining`, `ticks_until_next` | returns exact status and remaining ticks |
 | LCD refresh / 200ms | polling | real-time pacing, loop not blocked |
 | Slot overflow (5th start) | all 4 slots busy | returns `0xFF` |
 | `loop_count` (unsigned long) | main loop | proves loop is never blocked |
+
+### 8.1 Host Unit Test Suite & Automated CI
+
+The repository contains a native host-based test suite (`tests/test_async_delay.c`, `tests/test_stress.c`, and `tests/benchmark_cycles.c`) with a multi-configuration test runner (`tests/run_all_configs.sh`) and continuous integration workflow (`.github/workflows/ci.yml`).
+
+The test suite validates:
+- Initialization and clean reset
+- One-shot and periodic delays (polling and callback)
+- In-ISR vs Deferred callback execution (`async_delay_poll`)
+- Cancellation and `async_delay_cancel_all()`
+- In-place retargeting via `async_delay_restart()`
+- Counter wrap-around boundary arithmetic across 8, 16, and 32-bit tick counters
+- High-frequency continuous wrap-around with interleaving periodic delays
+- Dynamic power-saving recalculation (`async_delay_ticks_until_next`) during runtime cancellation/re-targeting
+- Self-rescheduling from inside callbacks (`ASYNC_DELAY_CALLBACK_RESCHEDULE=1`)
+- Boundary delays (0-tick immediate expiration and 1-tick delay)
+- Slot exhaustion, memory reuse, and leak prevention
+- Zero-overhead compile-time LUT bitmask verification
+- Native CPU throughput & operation latency profiling
+
+Every commit is tested against the matrix: Default (16-bit), 8-bit/8-slots, 32-bit/16-slots, Deferred Callbacks, Split Arrays, Polling-Only Footprint, and Unoptimized fallbacks.
 
 ### Verification Guidelines
 

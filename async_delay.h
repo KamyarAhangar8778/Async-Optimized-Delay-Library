@@ -148,6 +148,10 @@
 #ifndef _ASYNC_DELAY_INCLUDED_
 #define _ASYNC_DELAY_INCLUDED_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Library version: number of the last plan that modified this header.
 // The user compiles against a MIRROR copy (G:\Kaveh\CodeVsion\inc\async_delay.h),
 // not this repository file - comparing this one constant tells whether the mirror
@@ -159,7 +163,7 @@
 //
 // Bump by 1 in EVERY future plan that edits this header, and record the new value
 // in plans/README.md and README.md. Costs zero Flash/RAM (preprocessor only).
-#define ASYNC_DELAY_VERSION 9
+#define ASYNC_DELAY_VERSION 10
 
 // ---------- Configuration validation ----------
 
@@ -520,14 +524,18 @@ static volatile async_mask_t _async_pending_mask;
 #define _AD_FLAGS(i)   (_async_slots[i].state)
 #endif
 #endif
+#if ASYNC_DELAY_OPT_MERGED_FLAGS
+#define _AD_STATE(i)   ((unsigned char)(_AD_FLAGS(i) & 0x03))
+#else
+#define _AD_STATE(i)   (_AD_FLAGS(i))
+#endif
+
 #if ASYNC_DELAY_DISABLE_PERIODIC
 #define _AD_REPEAT(i)  0
 #else
 #if ASYNC_DELAY_OPT_MERGED_FLAGS
-#define _AD_STATE(i)   ((unsigned char)(_AD_FLAGS(i) & 0x03))
 #define _AD_REPEAT(i)  ((_AD_FLAGS(i) & ASYNC_FLAG_REPEAT) != 0)
 #else
-#define _AD_STATE(i)   (_AD_FLAGS(i))
 #if ASYNC_DELAY_OPT_SPLIT_ARRAYS
 #define _AD_REPEAT(i)  (_async_repeat[i])
 #else
@@ -562,6 +570,24 @@ static volatile async_mask_t _async_pending_mask;
     ((async_tick_t)((async_tick_t)(now) - (async_tick_t)(t)) < _ASYNC_HALF_RANGE)
 
 // ---------- Critical section (MAIN context only) ----------
+// ---------- Compiler & Platform Portability Layer ----------
+// Supports CodeVisionAVR, AVR-GCC (Microchip Studio / Arduino),
+// and Host GCC/Clang for native simulation and unit testing.
+#if defined(__GNUC__) || defined(__clang__)
+    #if defined(__AVR__)
+        #include <avr/io.h>
+        #include <avr/interrupt.h>
+        #define _ASYNC_ASM_CLI() cli()
+    #else
+        // Host simulation (Linux / Windows / macOS testing)
+        #ifndef _ASYNC_HOST_SREG_DEFINED
+        #define _ASYNC_HOST_SREG_DEFINED
+        static volatile unsigned char SREG = 0;
+        #endif
+        #define _ASYNC_ASM_CLI() ((void)0)
+    #endif
+#endif
+
 // The masks and _async_next_target are shared with the ISR. On AVR
 // `mask |= bit` is LDS/OR/STS, so an ISR bit-clear landing mid-sequence is
 // lost. Main-context code therefore brackets every such update.
@@ -570,9 +596,8 @@ static volatile async_mask_t _async_pending_mask;
 // interrupts ON even if the caller had them off (start() called before `sei`
 // in main(), or from inside another critical section).
 //
-// The `#asm("cli")` is written literally at each call site instead of being
-// hidden in a macro body - CodeVisionAVR's #asm does not reliably survive
-// macro expansion.
+// For CodeVisionAVR, #asm("cli") is executed directly, while for GCC/Clang
+// _ASYNC_ASM_CLI() is invoked.
 #if ASYNC_DELAY_FIX_ATOMIC_MASK
 #define _ASYNC_CRIT_DECL     unsigned char _ad_sreg;
 #define _ASYNC_SAVE_SREG()   _ad_sreg = SREG
@@ -664,13 +689,21 @@ static unsigned char _async_delay_start_common(async_tick_t duration,
     async_tick_t now, tgt;
     _ASYNC_CRIT_DECL
 
+#if ASYNC_DELAY_DISABLE_CALLBACKS
+    (void)callback;
+#endif
+
     // ---- Find a slot that is not ALLOCATED ----
 #if ASYNC_DELAY_FIX_USED_MASK
     // For <= 8 slots, single-byte read is atomic on AVR.
     // For > 8 slots, critical section guards multi-byte mask.
 #if ASYNC_DELAY_MAX_SLOTS > 8 && ASYNC_DELAY_FIX_ATOMIC_MASK
     _ASYNC_SAVE_SREG();
+#if defined(__GNUC__) || defined(__clang__)
+    _ASYNC_ASM_CLI();
+#else
     #asm("cli")
+#endif
     u = _async_used_mask;
     _ASYNC_REST_SREG();
 #else
@@ -711,7 +744,11 @@ static unsigned char _async_delay_start_common(async_tick_t duration,
     // an interleaved ISR update.
     _ASYNC_SAVE_SREG();
 #if ASYNC_DELAY_TIMER_BITS >= 16 || ASYNC_DELAY_FIX_ATOMIC_MASK
+#if defined(__GNUC__) || defined(__clang__)
+    _ASYNC_ASM_CLI();
+#else
     #asm("cli")
+#endif
 #endif
     now = _async_tick_counter;
     tgt = (async_tick_t)(now + duration);
@@ -811,7 +848,11 @@ static unsigned char async_delay_restart(unsigned char slot_id, async_tick_t new
 
     _ASYNC_SAVE_SREG();
 #if ASYNC_DELAY_TIMER_BITS >= 16 || ASYNC_DELAY_FIX_ATOMIC_MASK
+#if defined(__GNUC__) || defined(__clang__)
+    _ASYNC_ASM_CLI();
+#else
     #asm("cli")
+#endif
 #endif
     now = _async_tick_counter;
     tgt = (async_tick_t)(now + new_duration);
@@ -844,7 +885,11 @@ static unsigned char async_delay_restart(unsigned char slot_id, async_tick_t new
 
     _ASYNC_REST_SREG();
 #if !ASYNC_DELAY_FIX_ATOMIC_MASK && ASYNC_DELAY_TIMER_BITS >= 16
+#if defined(__GNUC__) || defined(__clang__)
+    sei();
+#else
     #asm("sei")
+#endif
 #endif
     return 1;
 }
@@ -871,7 +916,11 @@ static unsigned char async_delay_elapsed(unsigned char slot_id)
     slotbit = _AD_SLOT_BIT(slot_id);
 #if ASYNC_DELAY_MAX_SLOTS > 8 && ASYNC_DELAY_FIX_ATOMIC_MASK
     _ASYNC_SAVE_SREG();
+#if defined(__GNUC__) || defined(__clang__)
+    _ASYNC_ASM_CLI();
+#else
     #asm("cli")
+#endif
     if (_async_active_mask & slotbit)
     {
         _ASYNC_REST_SREG();
@@ -889,7 +938,11 @@ static unsigned char async_delay_elapsed(unsigned char slot_id)
         // Releasing the allocation is what finally makes the slot reusable.
 #if ASYNC_DELAY_FIX_ATOMIC_MASK
         _ASYNC_SAVE_SREG();
+#if defined(__GNUC__) || defined(__clang__)
+        _ASYNC_ASM_CLI();
+#else
         #asm("cli")
+#endif
 #endif
         _async_used_mask &= (async_mask_t)~slotbit;
 #if ASYNC_DELAY_FIX_ATOMIC_MASK
@@ -931,7 +984,11 @@ static void async_delay_cancel(unsigned char slot_id)
 
 #if ASYNC_DELAY_FIX_ATOMIC_MASK
     _ASYNC_SAVE_SREG();
+#if defined(__GNUC__) || defined(__clang__)
+    _ASYNC_ASM_CLI();
+#else
     #asm("cli")
+#endif
 #endif
 
 #if ASYNC_DELAY_OPT_FAST_CANCEL && ASYNC_DELAY_OPT_NEXT_TARGET
@@ -962,6 +1019,143 @@ static void async_delay_cancel(unsigned char slot_id)
 #else
     _AD_FLAGS(slot_id) = ASYNC_SLOT_FREE;
 #endif
+}
+
+// ---------- Utility & Power-Saving APIs ----------
+
+// Check if a slot is currently active and counting down.
+// Returns 1 if active, 0 if free, expired, or slot_id is invalid.
+static unsigned char async_delay_is_active(unsigned char slot_id)
+{
+    if (slot_id >= ASYNC_DELAY_MAX_SLOTS)
+        return 0;
+#if ASYNC_DELAY_OPT_BITMASK
+    return (_async_active_mask & _AD_SLOT_BIT(slot_id)) != 0;
+#else
+    return (_AD_STATE(slot_id) == ASYNC_SLOT_ACTIVE);
+#endif
+}
+
+// Return the total count of currently active delays.
+static unsigned char async_delay_active_count(void)
+{
+    unsigned char count = 0;
+#if ASYNC_DELAY_OPT_BITMASK
+    async_mask_t m = _async_active_mask;
+    while (m)
+    {
+        count += (unsigned char)(m & 1);
+        m >>= 1;
+    }
+#else
+    unsigned char i;
+    for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)
+    {
+        if (_AD_STATE(i) == ASYNC_SLOT_ACTIVE)
+            count++;
+    }
+#endif
+    return count;
+}
+
+// Calculate remaining ticks until slot_id expires.
+// Returns 0 if slot_id is invalid, not active, or already reached.
+static async_tick_t async_delay_remaining(unsigned char slot_id)
+{
+    async_tick_t now, tgt;
+#if ASYNC_DELAY_TIMER_BITS >= 16 || ASYNC_DELAY_FIX_ATOMIC_MASK
+    _ASYNC_CRIT_DECL
+#endif
+
+    if (!async_delay_is_active(slot_id))
+        return 0;
+
+#if ASYNC_DELAY_TIMER_BITS >= 16 || ASYNC_DELAY_FIX_ATOMIC_MASK
+    _ASYNC_SAVE_SREG();
+#if defined(__GNUC__) || defined(__clang__)
+    _ASYNC_ASM_CLI();
+#else
+    #asm("cli")
+#endif
+#endif
+    now = _async_tick_counter;
+    tgt = _AD_TARGET(slot_id);
+#if ASYNC_DELAY_TIMER_BITS >= 16 || ASYNC_DELAY_FIX_ATOMIC_MASK
+    _ASYNC_REST_SREG();
+#endif
+
+    if (_ASYNC_REACHED(now, tgt))
+        return 0;
+    return (async_tick_t)(tgt - now);
+}
+
+// Calculate ticks remaining until the earliest active delay expires.
+// Returns 0 if no delays are active or if the earliest delay is already due.
+// Designed for MCU power saving (e.g. Sleep / IDLE mode or prescaler tuning).
+static async_tick_t async_delay_ticks_until_next(void)
+{
+    async_tick_t now, next_tgt;
+#if ASYNC_DELAY_TIMER_BITS >= 16 || ASYNC_DELAY_FIX_ATOMIC_MASK
+    _ASYNC_CRIT_DECL
+#endif
+#if !ASYNC_DELAY_OPT_NEXT_TARGET
+    unsigned char i, first = 1;
+#endif
+
+#if ASYNC_DELAY_OPT_BITMASK
+    if (_async_active_mask == 0)
+        return 0;
+#endif
+
+#if ASYNC_DELAY_TIMER_BITS >= 16 || ASYNC_DELAY_FIX_ATOMIC_MASK
+    _ASYNC_SAVE_SREG();
+#if defined(__GNUC__) || defined(__clang__)
+    _ASYNC_ASM_CLI();
+#else
+    #asm("cli")
+#endif
+#endif
+    now = _async_tick_counter;
+#if ASYNC_DELAY_OPT_NEXT_TARGET
+    next_tgt = _async_next_target;
+#else
+    next_tgt = 0;
+    for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)
+    {
+        if (_AD_STATE(i) == ASYNC_SLOT_ACTIVE)
+        {
+            if (first || _ASYNC_REACHED(next_tgt, _AD_TARGET(i)))
+            {
+                next_tgt = _AD_TARGET(i);
+                first = 0;
+            }
+        }
+    }
+    if (first)
+    {
+#if ASYNC_DELAY_TIMER_BITS >= 16 || ASYNC_DELAY_FIX_ATOMIC_MASK
+        _ASYNC_REST_SREG();
+#endif
+        return 0;
+    }
+#endif
+#if ASYNC_DELAY_TIMER_BITS >= 16 || ASYNC_DELAY_FIX_ATOMIC_MASK
+    _ASYNC_REST_SREG();
+#endif
+
+    if (_ASYNC_REACHED(now, next_tgt))
+        return 0;
+    return (async_tick_t)(next_tgt - now);
+}
+
+// Cancel all active and allocated delays in one call.
+static void async_delay_cancel_all(void)
+{
+    unsigned char i;
+    for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)
+    {
+        async_delay_cancel(i);
+    }
 }
 
 // ISR-context: process slot i that has been confirmed expired.
@@ -1321,7 +1515,11 @@ static void async_delay_poll(void)
 #endif
 
     _ASYNC_SAVE_SREG();
+#if defined(__GNUC__) || defined(__clang__)
+    _ASYNC_ASM_CLI();
+#else
     #asm("cli")
+#endif
     p = _async_pending_mask;
     _async_pending_mask = 0;
     _ASYNC_REST_SREG();
@@ -1349,4 +1547,8 @@ static void async_delay_poll(void)
 }
 #endif
 
+#ifdef __cplusplus
+}
 #endif
+
+#endif /* _ASYNC_DELAY_INCLUDED_ */

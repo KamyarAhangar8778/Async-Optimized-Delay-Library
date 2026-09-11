@@ -1,9 +1,9 @@
 # async_delay.h — Non-Blocking Timer & Delay Library for AVR
 
-`async_delay.h` is a high-performance, header-only, non-blocking asynchronous timer library designed for 8-bit AVR microcontrollers (**ATmega8 / ATmega16 / ATmega32**) compiled with **CodeVisionAVR**.
+`async_delay.h` is a high-performance, header-only, non-blocking asynchronous timer library designed for 8-bit AVR microcontrollers (**ATmega8 / ATmega16 / ATmega32**) and Arduino environments, compiled with **CodeVisionAVR**, **AVR-GCC**, or natively tested with **GCC / Clang** on host systems.
 
 > **Contract for AI Agents & Firmware Engineers:**
-> This document is the definitive integration specification for `async_delay.h`. When incorporating this library into any project, all necessary configuration macros, hardware timer formulas, concurrency constraints, API contracts, CodeVisionAVR quirks, and verified implementation patterns are fully detailed below.
+> This document is the definitive integration specification for `async_delay.h` (v10). When incorporating this library into any project, all necessary configuration macros, hardware timer formulas, concurrency constraints, API contracts, CodeVisionAVR quirks, and verified implementation patterns are fully detailed below.
 
 ---
 
@@ -180,6 +180,11 @@ All library functions are declared `static` to allow clean, self-contained singl
 | `async_delay_elapsed` | `unsigned char async_delay_elapsed(unsigned char slot_id)` | Main Loop | Polls a one-shot timer. Returns `1` and frees the slot if expired, else `0`. |
 | `async_delay_restart` | `unsigned char async_delay_restart(unsigned char slot_id, async_tick_t new_dur)` | Main / Callback | Retargets an allocated timer in-place with a new duration, keeping the same slot ID. Returns `1` on success, `0` on error. |
 | `async_delay_cancel` | `void async_delay_cancel(unsigned char slot_id)` | Main / Callback | Cancels a running or expired timer and reclaims its slot. |
+| `async_delay_cancel_all` | `void async_delay_cancel_all(void)` | Main / Callback | Cancels all active timers and reclaims all slots atomically. |
+| `async_delay_is_active` | `unsigned char async_delay_is_active(unsigned char slot_id)` | Main / Callback | $O(1)$ query returning `1` if slot is currently running, `0` otherwise. |
+| `async_delay_active_count` | `unsigned char async_delay_active_count(void)` | Main / Callback | Returns the total count of currently running active slots. |
+| `async_delay_remaining` | `async_tick_t async_delay_remaining(unsigned char slot_id)` | Main / Callback | Returns remaining ticks until expiry for the given slot (or `0` if inactive/expired). |
+| `async_delay_ticks_until_next` | `async_tick_t async_delay_ticks_until_next(void)` | Main Loop | Calculates ticks until the nearest expiry among all active slots. Returns `0` if none active. Essential for AVR sleep modes (Idle/Power-save). |
 | `async_delay_tick` | `void async_delay_tick(void)` | Hardware ISR Only | Increments the internal tick counter and evaluates due timers. |
 | `async_delay_poll` | `void async_delay_poll(void)` | Main Loop Only | Dispatches pending deferred callbacks (only when `DEFERRED_CALLBACKS=1`). |
 
@@ -571,17 +576,37 @@ void main(void)
 
 ---
 
-## 9. Version Synchronization Contract
+## 9. Cross-Compiler & Platform Portability (v10)
+
+`async_delay.h` is portable across multiple toolchains and target environments:
+
+1. **CodeVisionAVR:** Native support with `#asm("cli")` / `#asm("sei")` inline assembly and register storage (`SREG`).
+2. **AVR-GCC & Arduino:** Native support with `<avr/io.h>`, `<avr/interrupt.h>`, and C++ `extern "C"` linkage.
+3. **Host Unit Testing (GCC / Clang):** Compiles natively on Linux, macOS, and Windows for simulated continuous integration, mocking atomic sections without AVR hardware.
+
+### Running Native Unit Tests
+
+```bash
+# Run single test suite
+gcc -Wall -Wextra -O2 -I. tests/test_async_delay.c -o tests/run_test && ./tests/run_test
+
+# Run full configuration test matrix
+./tests/run_all_configs.sh
+```
+
+---
+
+## 10. Version Synchronization Contract
 
 `async_delay.h` contains a build synchronization constant:
 ```c
-#define ASYNC_DELAY_VERSION 7
+#define ASYNC_DELAY_VERSION 10
 ```
 
 To guard against silent regressions or outdated local copies across external project directories, add this compile-time assertion to your application headers:
 
 ```c
-#if ASYNC_DELAY_VERSION != 7
+#if ASYNC_DELAY_VERSION != 10
 #error "async_delay.h version mismatch! Update the header copy in your include path."
 #endif
 ```

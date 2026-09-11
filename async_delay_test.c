@@ -39,6 +39,7 @@ static unsigned char led1_toggle = 0;      // set by polling (PB1)
 static unsigned char test_cancel_done = 0;
 static unsigned char test_cancel_failed = 0;
 static unsigned char test_restart_done = 0;
+static unsigned char test_util_done = 0;
 static unsigned char test_overflow_done = 0;
 static unsigned long  loop_count = 0;      // 32-bit: never wraps at 60000
 
@@ -185,15 +186,38 @@ void main(void)
                 test_restart_done = 2;
         }
 
+        // ---- Utility & Power-Saving APIs test ----
+        if (test_cancel_done && !test_util_done)
+        {
+            unsigned char u_act, u_cnt;
+            async_tick_t u_rem, u_next;
+
+            u_act  = async_delay_is_active(id_poll);
+            u_cnt  = async_delay_active_count();
+            u_rem  = async_delay_remaining(id_poll);
+            u_next = async_delay_ticks_until_next();
+
+            if (u_act == 1 && u_cnt >= 1 && u_rem > 0 && u_next > 0)
+                test_util_done = 1;
+            else
+                test_util_done = 2;
+        }
+
         // ---- LCD refresh paced at 200ms real time ----
         if (async_delay_elapsed(id_lcd))
         {
             id_lcd = async_delay_start(200, (void *)0);
 
             lcd_gotoxy(0, 0);
-            lcd_putsf("Loop:");
+            lcd_putsf("L:");
             ulong_to_str(loop_count, num_buf);
-            lcd_puts(num_buf);
+            lcd_puts(num_buf + 3);  // 7 chars of loop count
+            if (test_util_done == 1)
+                lcd_putsf(" U:OK");
+            else if (test_util_done == 2)
+                lcd_putsf(" U:FL");
+            else
+                lcd_putsf(" U:..");
 
             lcd_gotoxy(0, 1);
             if (test_overflow_done == 1)
