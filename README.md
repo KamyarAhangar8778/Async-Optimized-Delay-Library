@@ -55,7 +55,7 @@ Callback  Polling                │
 // 2. Configuration macros defined BEFORE the library header
 #define ASYNC_DELAY_TICK_HZ     1000    // Mandatory: Tick rate in Hz (1000 = 1ms)
 #define ASYNC_DELAY_TIMER_BITS  16      // Optional: 8, 16 (default), or 32
-#define ASYNC_DELAY_MAX_SLOTS   4       // Optional: Max concurrent timers (default 4, max 8)
+#define ASYNC_DELAY_MAX_SLOTS   4       // Optional: Max concurrent timers (default 4, up to 16)
 
 // 3. Include the library
 #include <async_delay.h>
@@ -75,29 +75,35 @@ All settings are configured via preprocessor `#define` directives prior to `#inc
 |---|---|---|---|
 | `ASYNC_DELAY_TICK_HZ` | *None* | $> 0$ | **Required.** Interrupt rate in Hz. Example: `1000` for a 1 ms tick. |
 | `ASYNC_DELAY_TIMER_BITS` | `16` | `8`, `16`, `32` | Width of the tick counter (`async_tick_t`). Determines maximum reliable delay duration. |
-| `ASYNC_DELAY_MAX_SLOTS` | `4` | `1` to `8` | Maximum concurrent timers. Defaults to 4. (Values $> 8$ require disabling bitmask optimizations). |
+| `ASYNC_DELAY_MAX_SLOTS` | `4` | `1` to `16` | Maximum concurrent timers. Defaults to 4. Supports up to 16 slots with native bitmask optimization via `async_mask_t`. |
 
 ### Behavioral & Optimization Flags
 
 | Flag | Default | Category | Architectural Impact |
 |---|---|---|---|
 | `ASYNC_DELAY_CALLBACK_RESCHEDULE` | `1` | Correctness | Marks a slot inactive *before* its callback runs. Enables a callback to reschedule itself via `async_delay_start()`. **Keep at `1`**. |
+| `ASYNC_DELAY_OPT_FAST_CANCEL` | `1` | Performance | Bypasses $O(N)$ recompute during `async_delay_cancel()` if cancelled slot wasn't the earliest deadline. Reduces cancellation to $O(1)$ ~22 cycles. |
+| `ASYNC_DELAY_FEATURE_RESTART` | `1` | Feature | Enables `async_delay_restart(slot_id, new_dur)` to retarget an existing slot in-place without freeing or changing its ID. |
 | `ASYNC_DELAY_DEFERRED_CALLBACKS` | `0` | Mode | When `1`, callbacks are deferred to `async_delay_poll()` in the main loop. Allows long operations inside callbacks. |
 | `ASYNC_DELAY_FIX_USED_MASK` | `1` | Correctness | Tracks allocated slots separately from running slots. Prevents expired, unpolled slots from being stolen. |
 | `ASYNC_DELAY_FIX_ATOMIC_MASK` | `1` | Concurrency | Protects main-context mask updates with an SREG-preserving critical section (`#asm("cli")`). |
-| `ASYNC_DELAY_OPT_BITMASK` | `1` | Performance | Restricts tick inspections to active slots via bitmask. |
+| `ASYNC_DELAY_OPT_BITMASK` | `1` | Performance | Restricts tick inspections to active slots via bitmask (supports up to 16 slots). |
 | `ASYNC_DELAY_OPT_NEXT_TARGET` | `1` | Performance | Caches earliest target; enables $O(1)$ early exit in `async_delay_tick()` when no slots are due. |
 | `ASYNC_DELAY_OPT_SPLIT_TICK` | `1` | Performance | Keeps `async_delay_tick()` free of local variables, avoiding CodeVisionAVR's `__SAVELOCR` register spill on idle ticks. |
-| `ASYNC_DELAY_OPT_UNROLL_TICK` | `1` | Performance | Expands slot checks into constant indices, eliminating runtime multiplications and bit-shifts. |
+| `ASYNC_DELAY_OPT_UNROLL_TICK` | `1` | Performance | Expands slot checks into constant indices (up to 16 slots), eliminating runtime multiplications and bit-shifts. |
 | `ASYNC_DELAY_OPT_MERGED_FLAGS` | `1` | Footprint | Packs slot state and periodic flags into a single byte, saving RAM. |
 | `ASYNC_DELAY_OPT_SPLIT_ARRAYS` | `0` | Footprint | Uses parallel arrays instead of an array of structures. |
 
-### Memory Consumption & Limits
+### Memory Consumption & Performance
 
-Under default settings (`TIMER_BITS=16`, `MAX_SLOTS=4`, `TICK_HZ=1000`) on an ATmega8:
-- **SRAM Usage:** **34 bytes** total ($28\text{ B}$ slots + $2\text{ B}$ counter + $2\text{ B}$ target cache + $2\text{ B}$ bitmasks).
-- **Flash Usage:** **~378 words** (~756 bytes, $< 10\%$ of ATmega8 flash).
-- **ISR Idle Overhead:** Hand-optimized to **~85 CPU cycles** (~$10.6\ \mu\text{s}$ at 8 MHz, or $\approx 1.06\%$ CPU load at 1 kHz tick rate).
+Measured on ATmega8 @ 8 MHz (`TIMER_BITS=16`, `MAX_SLOTS=4`, `TICK_HZ=1000`):
+
+| Configuration | SRAM | Flash | ISR Idle Overhead | Main Loop Poll Overhead | CPU Load @ 1 kHz |
+|---|---|---|---|---|---|
+| **Default Settings** | **34 bytes** | **378 words** (~756 B) | **~85 cycles** (~10.6 µs) | — | **~1.06 %** |
+| **Deferred Callbacks** (`DEFERRED=1`) | **35 bytes** (+1 B) | **397 words** (~794 B) | **~85 cycles** (~10.6 µs) | **~25 cycles** (when idle) | **~1.3 %** |
+
+*Note: In Deferred Mode, callbacks run in main context (`async_delay_poll()`), eliminating ISR latency constraints and allowing LCD, UART, and delay operations inside callbacks.*
 
 ---
 
@@ -126,6 +132,35 @@ $$\text{OCR} = \frac{\text{Timer Frequency}}{\text{ASYNC\_DELAY\_TICK\_HZ}} - 1 
 ### CodeWizardAVR Input Warning
 > **Crucial Tooling Quirk:** The "Compare" text box in CodeWizardAVR only accepts **two decimal digits**. Typing `124` gets truncated or corrupted into `80`. **Always enter values greater than 99 as hexadecimal** (e.g., write `0x7C` for 124, `0xF9` for 249).
 
+### Ready Hardware Initialization Snippets
+
+#### 1. ATmega8 — Timer2 CTC (8 MHz, 1 ms Tick):
+```c
+ASSR  = 0x00;
+TCCR2 = (1 << WGM21) | (1 << CS22);  // CTC mode, prescaler 64 (CS22=1, CS21=0, CS20=0)
+TCNT2 = 0x00;
+OCR2  = 0x7C;                        // 124 decimal (8 MHz / 64 / 1000 - 1)
+TIMSK |= (1 << OCIE2);               // Enable Timer2 compare interrupt
+```
+
+#### 2. ATmega8 / 16 / 32 — Timer1 CTC 16-bit (8 MHz or 16 MHz, 1 ms Tick):
+```c
+TCCR1A = 0x00;
+TCCR1B = (1 << WGM12) | (1 << CS11) | (1 << CS10); // CTC mode (Mode 4), prescaler 64
+TCNT1H = 0x00; TCNT1L = 0x00;
+// For 8 MHz: OCR1A = 124 (0x007C); For 16 MHz: OCR1A = 249 (0x00F9)
+OCR1AH = 0x00; OCR1AL = 0x7C; 
+TIMSK |= (1 << OCIE1A);              // Enable Timer1 Compare A interrupt
+```
+
+#### 3. ATmega16 / ATmega32 — Timer0 CTC (8 MHz, 1 ms Tick):
+```c
+TCCR0 = (1 << WGM01) | (1 << CS01) | (1 << CS00);  // CTC mode, prescaler 64
+TCNT0 = 0x00;
+OCR0  = 0x7C;                                      // 124 decimal
+TIMSK |= (1 << OCIE0);                             // Enable Timer0 compare interrupt
+```
+
 ---
 
 ## 5. API Reference
@@ -140,6 +175,7 @@ All library functions are declared `static` to allow clean, self-contained singl
 | `async_delay_start` | `unsigned char async_delay_start(async_tick_t duration, async_delay_cb_t cb)` | Main / Callback | Starts a one-shot delay. Returns slot ID ($0$ to $\text{MAX}-1$) or `0xFF` on failure. |
 | `async_delay_start_periodic` | `unsigned char async_delay_start_periodic(async_tick_t duration, async_delay_cb_t cb)` | Main / Callback | Starts an auto-rearming periodic timer. Returns slot ID or `0xFF`. |
 | `async_delay_elapsed` | `unsigned char async_delay_elapsed(unsigned char slot_id)` | Main Loop | Polls a one-shot timer. Returns `1` and frees the slot if expired, else `0`. |
+| `async_delay_restart` | `unsigned char async_delay_restart(unsigned char slot_id, async_tick_t new_dur)` | Main / Callback | Retargets an allocated timer in-place with a new duration, keeping the same slot ID. Returns `1` on success, `0` on error. |
 | `async_delay_cancel` | `void async_delay_cancel(unsigned char slot_id)` | Main / Callback | Cancels a running or expired timer and reclaims its slot. |
 | `async_delay_tick` | `void async_delay_tick(void)` | Hardware ISR Only | Increments the internal tick counter and evaluates due timers. |
 | `async_delay_poll` | `void async_delay_poll(void)` | Main Loop Only | Dispatches pending deferred callbacks (only when `DEFERRED_CALLBACKS=1`). |
@@ -403,23 +439,36 @@ void main(void)
 
 ---
 
-### Pattern 4: Safe Periodic Retiming
+### Pattern 4: Safe Periodic Retiming & Watchdog Resets (`async_delay_restart`)
 
-To change the interval of an active periodic timer:
+To change the interval of an active timer or reset a watchdog/debounce timeout without reallocating a new slot ID, use `async_delay_restart`:
 
 ```c
 static unsigned char g_heartbeat_id = 0xFF;
 
+void init_heartbeat(void)
+{
+    g_heartbeat_id = async_delay_start_periodic(1000, heartbeat_cb);
+}
+
 void set_heartbeat_rate(unsigned int ms_rate)
 {
-    // Cancel the existing timer if valid
+    // Restarts in-place without slot reallocation or ID changes:
     if (g_heartbeat_id != 0xFF)
     {
-        async_delay_cancel(g_heartbeat_id);
+        async_delay_restart(g_heartbeat_id, ms_rate);
     }
+    else
+    {
+        g_heartbeat_id = async_delay_start_periodic(ms_rate, heartbeat_cb);
+    }
+}
 
-    // Allocate new periodic timer
-    g_heartbeat_id = async_delay_start_periodic(ms_rate, heartbeat_cb);
+// Watchdog / debounce reset pattern:
+void kick_communication_watchdog(unsigned char wdt_slot_id)
+{
+    // Resets the deadline to 3000ms from now:
+    async_delay_restart(wdt_slot_id, 3000);
 }
 ```
 

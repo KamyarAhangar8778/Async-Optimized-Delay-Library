@@ -10,7 +10,8 @@ Tests the async_delay library:
   - LED on PB0 blinks every 500ms via DEFERRED callback (drained by
     async_delay_poll() in the main loop - DEFERRED_CALLBACKS=1)
   - LED on PB1 blinks every 750ms via polling
-  - Cancel test (2000ms delay cancelled early -> never fires)
+  - Cancel test (2000ms delay cancelled early -> fast-path cancel -> never fires)
+  - Restart test (in-place retargeting without slot reallocation)
   - Slot overflow test (5th start must return 0xFF)
   - LCD refresh paced by async_delay every 200ms
   - loop_count (unsigned long) proves main loop is NOT blocked
@@ -37,6 +38,7 @@ static unsigned char led0_toggle = 0;      // set by callback (PB0)
 static unsigned char led1_toggle = 0;      // set by polling (PB1)
 static unsigned char test_cancel_done = 0;
 static unsigned char test_cancel_failed = 0;
+static unsigned char test_restart_done = 0;
 static unsigned char test_overflow_done = 0;
 static unsigned long  loop_count = 0;      // 32-bit: never wraps at 60000
 
@@ -79,6 +81,7 @@ interrupt [TIM2_COMP] void timer2_comp_isr(void)
 void main(void)
 {
     unsigned char id_poll, id_cancel, id_lcd, id_fail;
+    unsigned char id_rst, rst_ok1, rst_ok2;
     char num_buf[11];
 
     // ---- Port B init: PB0 and PB1 as output (LEDs) ----
@@ -162,11 +165,24 @@ void main(void)
             id_poll = async_delay_start(750, (void *)0);
         }
 
-        // ---- Cancel test: cancel after first few loop iterations ----
+        // ---- Cancel & Restart test: execute after first few loop iterations ----
         if (!test_cancel_done && loop_count > 100)
         {
             async_delay_cancel(id_cancel);
             test_cancel_done = 1;
+
+            // Step A: Restart on freed slot must fail safely (return 0)
+            rst_ok1 = (async_delay_restart(id_cancel, 500) == 0) ? 1 : 0;
+
+            // Step B: Allocate slot, restart in-place with new duration (must return 1)
+            id_rst = async_delay_start(1000, (void *)0);
+            rst_ok2 = (async_delay_restart(id_rst, 300) == 1) ? 1 : 0;
+            async_delay_cancel(id_rst);
+
+            if (rst_ok1 && rst_ok2)
+                test_restart_done = 1;
+            else
+                test_restart_done = 2;
         }
 
         // ---- LCD refresh paced at 200ms real time ----
@@ -181,18 +197,25 @@ void main(void)
 
             lcd_gotoxy(0, 1);
             if (test_overflow_done == 1)
-                lcd_putsf("Ov:OK   ");
+                lcd_putsf("Ov:OK ");
             else if (test_overflow_done == 2)
-                lcd_putsf("Ov:FAIL ");
+                lcd_putsf("Ov:FL ");
             else
-                lcd_putsf("Ov:.... ");
+                lcd_putsf("Ov:.. ");
 
             if (test_cancel_failed)
-                lcd_putsf("Cnc:FAIL");
+                lcd_putsf("Cn:FL ");
             else if (test_cancel_done)
-                lcd_putsf("Cnc:OK  ");
+                lcd_putsf("Cn:OK ");
             else
-                lcd_putsf("Cnc:..  ");
+                lcd_putsf("Cn:.. ");
+
+            if (test_restart_done == 1)
+                lcd_putsf("R:OK");
+            else if (test_restart_done == 2)
+                lcd_putsf("R:FL");
+            else
+                lcd_putsf("R:..");
         }
     }
 }

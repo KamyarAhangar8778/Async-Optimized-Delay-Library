@@ -30,6 +30,8 @@
 //
 //   Speed flags (identical observable behavior):
 //   ASYNC_DELAY_OPT_BITMASK        - default 1. Visit only ACTIVE slots.
+//   ASYNC_DELAY_OPT_FAST_CANCEL    - default 1. Skip O(N) minimum recomputation
+//                              in cancel() when canceled slot wasn't earliest.
 //   ASYNC_DELAY_OPT_MERGED_FLAGS   - default 1. state+repeat in one byte.
 //   ASYNC_DELAY_OPT_UNROLL_TICK    - default 1. Compile-time slot indices.
 //   ASYNC_DELAY_OPT_NEXT_TARGET    - default 1. O(1) earliest-target gate.
@@ -38,6 +40,10 @@
 //                              registers on idle ticks.
 //   ASYNC_DELAY_OPT_SPLIT_ARRAYS   - default 0. Parallel arrays instead of a
 //                              struct (opt-in; measure before adopting).
+//
+//   Feature flags:
+//   ASYNC_DELAY_FEATURE_RESTART    - default 1. Provide async_delay_restart()
+//                              to retarget a delay without losing slot ID.
 //
 //   Behavior-changing (opt in consciously):
 //   ASYNC_DELAY_DEFERRED_CALLBACKS - default 0. Callbacks run from
@@ -63,7 +69,10 @@
 //   many slots are running.
 //   Optimization flags: ASYNC_DELAY_OPT_BITMASK (1), ASYNC_DELAY_OPT_MERGED_FLAGS (1),
 //   ASYNC_DELAY_OPT_SPLIT_ARRAYS (0), ASYNC_DELAY_OPT_UNROLL_TICK (1),
-//   ASYNC_DELAY_OPT_NEXT_TARGET (1), ASYNC_DELAY_OPT_SPLIT_TICK (1).
+//   ASYNC_DELAY_OPT_NEXT_TARGET (1), ASYNC_DELAY_OPT_SPLIT_TICK (1),
+//   ASYNC_DELAY_OPT_FAST_CANCEL (1).
+//   Feature flags:
+//   ASYNC_DELAY_FEATURE_RESTART (1).
 //   Correctness flags:
 //   ASYNC_DELAY_FIX_USED_MASK (1), ASYNC_DELAY_FIX_ATOMIC_MASK (1).
 //   Opt-in: ASYNC_DELAY_DEFERRED_CALLBACKS (0).
@@ -139,7 +148,7 @@
 //
 // Bump by 1 in EVERY future plan that edits this header, and record the new value
 // in plans/README.md and README.md. Costs zero Flash/RAM (preprocessor only).
-#define ASYNC_DELAY_VERSION 7
+#define ASYNC_DELAY_VERSION 8
 
 // ---------- Configuration validation ----------
 
@@ -245,6 +254,20 @@
 #define ASYNC_DELAY_OPT_NEXT_TARGET 1
 #endif
 
+// ASYNC_DELAY_OPT_FAST_CANCEL : 1 = O(1) cancel fast path. In cancel(), skip
+//                             recomputing _async_next_target if the cancelled
+//                             slot was not the earliest one or no active slots
+//                             remain.
+#ifndef ASYNC_DELAY_OPT_FAST_CANCEL
+#define ASYNC_DELAY_OPT_FAST_CANCEL 1
+#endif
+
+// ASYNC_DELAY_FEATURE_RESTART : 1 = provides async_delay_restart() to retarget
+//                             or restart an allocated slot without losing its ID.
+#ifndef ASYNC_DELAY_FEATURE_RESTART
+#define ASYNC_DELAY_FEATURE_RESTART 1
+#endif
+
 // ASYNC_DELAY_OPT_SPLIT_TICK : 1 = async_delay_tick() keeps NO locals and the
 //                             slot walk lives in a separate function.
 //                             CodeVisionAVR spills register locals with
@@ -275,8 +298,11 @@
 #endif
 
 // Constraints on the opt combinations:
-#if ASYNC_DELAY_OPT_BITMASK && ASYNC_DELAY_MAX_SLOTS > 8
-#error "[async_delay] ASYNC_DELAY_OPT_BITMASK supports at most 8 slots (8-bit mask)."
+#if ASYNC_DELAY_OPT_BITMASK && ASYNC_DELAY_MAX_SLOTS > 16
+#error "[async_delay] ASYNC_DELAY_OPT_BITMASK supports at most 16 slots."
+#endif
+#if ASYNC_DELAY_MAX_SLOTS > 8 && !ASYNC_DELAY_FIX_ATOMIC_MASK
+#error "[async_delay] ASYNC_DELAY_MAX_SLOTS > 8 requires ASYNC_DELAY_FIX_ATOMIC_MASK=1 (16-bit mask access is not atomic on 8-bit AVR)."
 #endif
 #if ASYNC_DELAY_OPT_SPLIT_ARRAYS && !ASYNC_DELAY_OPT_BITMASK
 #error "[async_delay] ASYNC_DELAY_OPT_SPLIT_ARRAYS requires ASYNC_DELAY_OPT_BITMASK=1."
@@ -293,8 +319,8 @@
 #if ASYNC_DELAY_OPT_NEXT_TARGET && ASYNC_DELAY_TIMER_BITS >= 16 && !ASYNC_DELAY_FIX_ATOMIC_MASK
 #error "[async_delay] ASYNC_DELAY_OPT_NEXT_TARGET with TIMER_BITS>=16 requires ASYNC_DELAY_FIX_ATOMIC_MASK=1 (the ISR reads a multi-byte _async_next_target)."
 #endif
-#if ASYNC_DELAY_DEFERRED_CALLBACKS && ASYNC_DELAY_MAX_SLOTS > 8
-#error "[async_delay] ASYNC_DELAY_DEFERRED_CALLBACKS supports at most 8 slots (8-bit pending mask)."
+#if ASYNC_DELAY_DEFERRED_CALLBACKS && ASYNC_DELAY_MAX_SLOTS > 16
+#error "[async_delay] ASYNC_DELAY_DEFERRED_CALLBACKS supports at most 16 slots."
 #endif
 #if ASYNC_DELAY_DEFERRED_CALLBACKS && !ASYNC_DELAY_OPT_BITMASK
 #error "[async_delay] ASYNC_DELAY_DEFERRED_CALLBACKS requires ASYNC_DELAY_OPT_BITMASK=1."
@@ -310,6 +336,13 @@
     typedef unsigned int async_tick_t;
 #elif ASYNC_DELAY_TIMER_BITS == 32
     typedef unsigned long async_tick_t;
+#endif
+
+// ---------- Mask type based on MAX_SLOTS ----------
+#if ASYNC_DELAY_MAX_SLOTS <= 8
+    typedef unsigned char async_mask_t;
+#else
+    typedef unsigned int async_mask_t;
 #endif
 
 // Callback signature: receives the slot id that expired
@@ -357,14 +390,14 @@ static _async_slot_t _async_slots[ASYNC_DELAY_MAX_SLOTS];
 
 static volatile async_tick_t _async_tick_counter;
 #if ASYNC_DELAY_OPT_BITMASK
-static volatile unsigned char _async_active_mask;   // bit n = slot n ACTIVE
+static volatile async_mask_t _async_active_mask;   // bit n = slot n ACTIVE
 #endif
 #if ASYNC_DELAY_FIX_USED_MASK
 // bit n = slot n ALLOCATED (ACTIVE *or* EXPIRED-waiting-for-elapsed).
 // Needed because the ACTIVE mask alone cannot tell FREE from EXPIRED, so
 // start() would hand out a slot whose owner has not polled it yet.
 // Invariant: (_async_active_mask & ~_async_used_mask) == 0
-static volatile unsigned char _async_used_mask;
+static volatile async_mask_t _async_used_mask;
 #endif
 #if ASYNC_DELAY_OPT_NEXT_TARGET
 // Earliest target among ACTIVE slots (wrap-safe "earliest"). Meaningless while
@@ -375,7 +408,7 @@ static volatile async_tick_t _async_next_target;
 #endif
 #if ASYNC_DELAY_DEFERRED_CALLBACKS
 // bit n = slot n expired and still owes its callback to async_delay_poll().
-static volatile unsigned char _async_pending_mask;
+static volatile async_mask_t _async_pending_mask;
 #endif
 
 // Uniform per-slot access (works for both layouts)
@@ -484,18 +517,20 @@ static void async_delay_init(void)
 // CALLER MUST have interrupts disabled (or be in ISR context).
 static void _async_recompute_next(void)
 {
-    unsigned char i, m, first;
+    unsigned char i, first;
+    async_mask_t m, slotbit;
     async_tick_t best;
 
     m = _async_active_mask;
     if (m == 0)
         return;                     // value unused while nothing is active
 
-    best  = 0;
-    first = 1;
+    best    = 0;
+    first   = 1;
+    slotbit = 1;
     for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)
     {
-        if (m & (unsigned char)(1 << i))
+        if (m & slotbit)
         {
             // _ASYNC_REACHED(best, t) == "t is not later than best"
             if (first || _ASYNC_REACHED(best, _AD_TARGET(i)))
@@ -504,6 +539,7 @@ static void _async_recompute_next(void)
                 first = 0;
             }
         }
+        slotbit <<= 1;
     }
     _async_next_target = best;
 }
@@ -517,38 +553,55 @@ static unsigned char _async_delay_start_common(async_tick_t duration,
     unsigned char i;
 #if ASYNC_DELAY_OPT_BITMASK || ASYNC_DELAY_FIX_USED_MASK
     // NOTE: not named `bit` - that is a CodeVisionAVR type specifier keyword.
-    unsigned char slotbit;
+    async_mask_t slotbit;
 #endif
 #if ASYNC_DELAY_FIX_USED_MASK
-    unsigned char u;
+    async_mask_t u;
+#endif
+#if ASYNC_DELAY_OPT_BITMASK
+    async_mask_t cur_active;
 #endif
     async_tick_t now, tgt;
     _ASYNC_CRIT_DECL
 
     // ---- Find a slot that is not ALLOCATED ----
 #if ASYNC_DELAY_FIX_USED_MASK
-    // Single-byte read is atomic on AVR. An EXPIRED slot keeps its used bit,
-    // so it is NOT handed out until the owner calls elapsed().
+    // For <= 8 slots, single-byte read is atomic on AVR.
+    // For > 8 slots, critical section guards multi-byte mask.
+#if ASYNC_DELAY_MAX_SLOTS > 8 && ASYNC_DELAY_FIX_ATOMIC_MASK
+    _ASYNC_SAVE_SREG();
+    #asm("cli")
     u = _async_used_mask;
-    for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)
-        if ((u & (unsigned char)(1 << i)) == 0)
-            break;
+    _ASYNC_REST_SREG();
 #else
+    u = _async_used_mask;
+#endif
+    slotbit = 1;
     for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)
+    {
+        if ((u & slotbit) == 0)
+            break;
+        slotbit <<= 1;
+    }
+#else
 #if ASYNC_DELAY_OPT_BITMASK
-        if ((_async_active_mask & (unsigned char)(1 << i)) == 0)
+    slotbit = 1;
+    for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)
+    {
+        if ((_async_active_mask & slotbit) == 0)
             break;
+        slotbit <<= 1;
+    }
 #else
+    for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)
+    {
         if (_AD_STATE(i) == ASYNC_SLOT_FREE)
             break;
+    }
 #endif
 #endif
     if (i >= ASYNC_DELAY_MAX_SLOTS)
         return ASYNC_DELAY_NO_SLOT;
-
-#if ASYNC_DELAY_OPT_BITMASK || ASYNC_DELAY_FIX_USED_MASK
-    slotbit = (unsigned char)(1 << i);
-#endif
 
     // ---- One critical section for the whole shared-state update ----
     // AVR is 8-bit: reading a 16/32-bit volatile variable is NOT atomic. The
@@ -579,10 +632,14 @@ static unsigned char _async_delay_start_common(async_tick_t duration,
     _async_slots[i].repeat = repeat;  // struct layout
 #endif
 #endif
+#if ASYNC_DELAY_OPT_BITMASK
+    cur_active = _async_active_mask;
+#endif
 #if ASYNC_DELAY_OPT_NEXT_TARGET
     // Keep the earliest target. Must be evaluated BEFORE the active bit is
-    // set, so `_async_active_mask == 0` still means "stored value is stale".
-    if (_async_active_mask == 0 || _ASYNC_REACHED(_async_next_target, tgt))
+    // set, so `cur_active == 0` still means "stored value is stale".
+    // Caching cur_active eliminates redundant LDS and branch instructions.
+    if (cur_active == 0 || _ASYNC_REACHED(_async_next_target, tgt))
         _async_next_target = tgt;
 #endif
 #if ASYNC_DELAY_FIX_USED_MASK
@@ -591,7 +648,7 @@ static unsigned char _async_delay_start_common(async_tick_t duration,
 #if ASYNC_DELAY_OPT_BITMASK
     // Done LAST so the slot is fully built before it becomes visible to the
     // tick's mask walk.
-    _async_active_mask |= slotbit;
+    _async_active_mask = (async_mask_t)(cur_active | slotbit);
 #endif
     _ASYNC_REST_SREG();
 #if !ASYNC_DELAY_FIX_ATOMIC_MASK && ASYNC_DELAY_TIMER_BITS >= 16
@@ -620,6 +677,77 @@ static unsigned char async_delay_start_periodic(async_tick_t duration,
     return _async_delay_start_common(duration, callback, 1);
 }
 
+#if ASYNC_DELAY_FEATURE_RESTART
+// Restart or retarget an existing slot with a new duration.
+// The slot ID is preserved, and its target is updated relative to the current tick.
+// Can be called on ACTIVE or EXPIRED slots.
+// Returns 1 if successfully restarted, 0 if slot_id is invalid or FREE.
+static unsigned char async_delay_restart(unsigned char slot_id, async_tick_t new_duration)
+{
+#if ASYNC_DELAY_OPT_BITMASK
+    async_mask_t slotbit;
+#if ASYNC_DELAY_OPT_NEXT_TARGET
+    async_mask_t cur_active;
+#endif
+#endif
+    async_tick_t now, tgt;
+    _ASYNC_CRIT_DECL
+
+    if (slot_id >= ASYNC_DELAY_MAX_SLOTS)
+        return 0;
+
+    // Slot must be allocated (ACTIVE or EXPIRED) to be restarted
+#if ASYNC_DELAY_FIX_USED_MASK
+    if ((_async_used_mask & (async_mask_t)(1 << slot_id)) == 0)
+        return 0;
+#else
+    if (_AD_STATE(slot_id) == ASYNC_SLOT_FREE)
+        return 0;
+#endif
+
+    slotbit = (async_mask_t)(1 << slot_id);
+
+    _ASYNC_SAVE_SREG();
+#if ASYNC_DELAY_TIMER_BITS >= 16 || ASYNC_DELAY_FIX_ATOMIC_MASK
+    #asm("cli")
+#endif
+    now = _async_tick_counter;
+    tgt = (async_tick_t)(now + new_duration);
+
+    _AD_DUR(slot_id)    = new_duration;
+    _AD_TARGET(slot_id) = tgt;
+
+#if ASYNC_DELAY_OPT_MERGED_FLAGS
+    _AD_FLAGS(slot_id)  = (unsigned char)(ASYNC_SLOT_ACTIVE |
+                                          (_AD_REPEAT(slot_id) ? ASYNC_FLAG_REPEAT : 0));
+#else
+    _AD_FLAGS(slot_id)  = ASYNC_SLOT_ACTIVE;
+#endif
+
+#if ASYNC_DELAY_DEFERRED_CALLBACKS
+    // Clear any unpolled pending callback from a previous expiry
+    _async_pending_mask &= (async_mask_t)~slotbit;
+#endif
+
+#if ASYNC_DELAY_OPT_BITMASK
+#if ASYNC_DELAY_OPT_NEXT_TARGET
+    cur_active = _async_active_mask;
+    if (cur_active == 0 || _ASYNC_REACHED(_async_next_target, tgt))
+        _async_next_target = tgt;
+    _async_active_mask = (async_mask_t)(cur_active | slotbit);
+#else
+    _async_active_mask |= slotbit;
+#endif
+#endif
+
+    _ASYNC_REST_SREG();
+#if !ASYNC_DELAY_FIX_ATOMIC_MASK && ASYNC_DELAY_TIMER_BITS >= 16
+    #asm("sei")
+#endif
+    return 1;
+}
+#endif
+
 // Check if a polling-mode delay has expired.
 // Returns 1 if expired (and frees the slot), 0 otherwise.
 // Safe to call with invalid slot_id - returns 0 silently.
@@ -627,7 +755,7 @@ static unsigned char async_delay_elapsed(unsigned char slot_id)
 {
     // Declared at function scope: CodeVisionAVR follows C89 block rules, so a
     // declaration cannot appear after a statement.
-#if ASYNC_DELAY_FIX_USED_MASK
+#if ASYNC_DELAY_FIX_USED_MASK || (ASYNC_DELAY_OPT_BITMASK && ASYNC_DELAY_MAX_SLOTS > 8)
     _ASYNC_CRIT_DECL
 #endif
 
@@ -635,8 +763,19 @@ static unsigned char async_delay_elapsed(unsigned char slot_id)
         return 0;
 
 #if ASYNC_DELAY_OPT_BITMASK
-    if (_async_active_mask & (unsigned char)(1 << slot_id))
+#if ASYNC_DELAY_MAX_SLOTS > 8 && ASYNC_DELAY_FIX_ATOMIC_MASK
+    _ASYNC_SAVE_SREG();
+    #asm("cli")
+    if (_async_active_mask & (async_mask_t)(1 << slot_id))
+    {
+        _ASYNC_REST_SREG();
         return 0;                                 // still running
+    }
+    _ASYNC_REST_SREG();
+#else
+    if (_async_active_mask & (async_mask_t)(1 << slot_id))
+        return 0;                                 // still running
+#endif
 #endif
     if (_AD_STATE(slot_id) == ASYNC_SLOT_EXPIRED)
     {
@@ -646,7 +785,7 @@ static unsigned char async_delay_elapsed(unsigned char slot_id)
         _ASYNC_SAVE_SREG();
         #asm("cli")
 #endif
-        _async_used_mask &= (unsigned char)~(1 << slot_id);
+        _async_used_mask &= (async_mask_t)~(1 << slot_id);
 #if ASYNC_DELAY_FIX_ATOMIC_MASK
         _ASYNC_REST_SREG();
 #endif
@@ -662,7 +801,11 @@ static unsigned char async_delay_elapsed(unsigned char slot_id)
 static void async_delay_cancel(unsigned char slot_id)
 {
 #if ASYNC_DELAY_OPT_BITMASK
-    unsigned char clr;
+    async_mask_t clr;
+#if ASYNC_DELAY_OPT_FAST_CANCEL && ASYNC_DELAY_OPT_NEXT_TARGET
+    async_tick_t old_target;
+    unsigned char was_active;
+#endif
 #if ASYNC_DELAY_FIX_ATOMIC_MASK
     _ASYNC_CRIT_DECL
 #endif
@@ -672,12 +815,21 @@ static void async_delay_cancel(unsigned char slot_id)
         return;
 
 #if ASYNC_DELAY_OPT_BITMASK
-    clr = (unsigned char)~(1 << slot_id);
+    clr = (async_mask_t)~(1 << slot_id);
+
+#if ASYNC_DELAY_OPT_FAST_CANCEL && ASYNC_DELAY_OPT_NEXT_TARGET
+    old_target = _AD_TARGET(slot_id);
+#endif
 
 #if ASYNC_DELAY_FIX_ATOMIC_MASK
     _ASYNC_SAVE_SREG();
     #asm("cli")
 #endif
+
+#if ASYNC_DELAY_OPT_FAST_CANCEL && ASYNC_DELAY_OPT_NEXT_TARGET
+    was_active = ((_async_active_mask & (async_mask_t)(1 << slot_id)) != 0);
+#endif
+
     _async_active_mask &= clr;
 #if ASYNC_DELAY_FIX_USED_MASK
     _async_used_mask   &= clr;
@@ -687,10 +839,14 @@ static void async_delay_cancel(unsigned char slot_id)
 #endif
     _AD_FLAGS(slot_id) = ASYNC_SLOT_FREE;
 #if ASYNC_DELAY_OPT_NEXT_TARGET
-    // The cancelled slot may have been the minimum, so a full recompute is
-    // required. Skipping it could leave _async_next_target LATER than the true
-    // minimum, which makes a surviving slot fire late - never do that.
+#if ASYNC_DELAY_OPT_FAST_CANCEL
+    // The cancelled slot may have been the minimum. If it was NOT active, or
+    // was not the minimum, or no slots remain active, no recomputation is needed!
+    if (was_active && old_target == _async_next_target && _async_active_mask != 0)
+        _async_recompute_next();
+#else
     _async_recompute_next();
+#endif
 #endif
 #if ASYNC_DELAY_FIX_ATOMIC_MASK
     _ASYNC_REST_SREG();
@@ -705,7 +861,7 @@ static void async_delay_cancel(unsigned char slot_id)
 // tick is unrolled, which is what keeps __LSLW12 out of the hot path.
 // Interrupts are already off here (ISR context), so the mask read-modify-writes
 // need no extra guard.
-static void _async_delay_expire_slot(unsigned char i, unsigned char clr)
+static void _async_delay_expire_slot(unsigned char i, async_mask_t clr)
 {
 #if ASYNC_DELAY_CALLBACK_RESCHEDULE && !ASYNC_DELAY_DEFERRED_CALLBACKS
     async_delay_cb_t cb;
@@ -719,7 +875,7 @@ static void _async_delay_expire_slot(unsigned char i, unsigned char clr)
         // self-reschedule from the callback lands in a DIFFERENT slot.
         _AD_TARGET(i) += _AD_DUR(i);
 #if ASYNC_DELAY_DEFERRED_CALLBACKS
-        _async_pending_mask |= (unsigned char)~clr;
+        _async_pending_mask |= (async_mask_t)~clr;
 #else
         _AD_CB(i)(i);
 #endif
@@ -740,7 +896,7 @@ static void _async_delay_expire_slot(unsigned char i, unsigned char clr)
             _AD_FLAGS(i) = ASYNC_SLOT_FREE;
 #if ASYNC_DELAY_DEFERRED_CALLBACKS
             // Do NOT clear _AD_CB here - async_delay_poll() still needs it.
-            _async_pending_mask |= (unsigned char)~clr;
+            _async_pending_mask |= (async_mask_t)~clr;
 #else
             // Take a copy, null the slot's pointer, then call. A freed slot
             // with a live callback pointer would be an ICALL target if its
@@ -767,7 +923,7 @@ static void _async_delay_expire_slot(unsigned char i, unsigned char clr)
         // Periodic: fire callback, then re-arm using target +=
         // duration so timing stays steady even if a tick is late.
 #if ASYNC_DELAY_DEFERRED_CALLBACKS
-        _async_pending_mask |= (unsigned char)~clr;
+        _async_pending_mask |= (async_mask_t)~clr;
 #else
         _AD_CB(i)(i);
 #endif
@@ -780,7 +936,7 @@ static void _async_delay_expire_slot(unsigned char i, unsigned char clr)
         if (_AD_CB(i) != (void *)0)
         {
 #if ASYNC_DELAY_DEFERRED_CALLBACKS
-            _async_pending_mask |= (unsigned char)~clr;
+            _async_pending_mask |= (async_mask_t)~clr;
 #else
             _AD_CB(i)(i);
 #endif
@@ -813,11 +969,11 @@ static void _async_delay_expire_slot(unsigned char i, unsigned char clr)
 // slot instead of ~13.
 // Do NOT introduce a runtime-indexed caller; it silently undoes all of it.
 #define _AD_TICK_SLOT(n)                                                      \
-    if (_ad_m & (unsigned char)(1 << (n)))                                    \
+    if (_ad_m & (async_mask_t)(1 << (n)))                                     \
     {                                                                         \
         if (_ASYNC_REACHED(_ad_now, _AD_TARGET(n)))                           \
             _async_delay_expire_slot((unsigned char)(n),                      \
-                                     (unsigned char)~(1 << (n)));            \
+                                     (async_mask_t)~(1 << (n)));              \
     }
 
 // Slots above MAX_SLOTS expand to nothing, so the sweep below is one macro
@@ -858,11 +1014,53 @@ static void _async_delay_expire_slot(unsigned char i, unsigned char clr)
 #else
 #define _AD_TICK_S7
 #endif
+#if ASYNC_DELAY_MAX_SLOTS > 8
+#define _AD_TICK_S8  _AD_TICK_SLOT(8)
+#else
+#define _AD_TICK_S8
+#endif
+#if ASYNC_DELAY_MAX_SLOTS > 9
+#define _AD_TICK_S9  _AD_TICK_SLOT(9)
+#else
+#define _AD_TICK_S9
+#endif
+#if ASYNC_DELAY_MAX_SLOTS > 10
+#define _AD_TICK_S10 _AD_TICK_SLOT(10)
+#else
+#define _AD_TICK_S10
+#endif
+#if ASYNC_DELAY_MAX_SLOTS > 11
+#define _AD_TICK_S11 _AD_TICK_SLOT(11)
+#else
+#define _AD_TICK_S11
+#endif
+#if ASYNC_DELAY_MAX_SLOTS > 12
+#define _AD_TICK_S12 _AD_TICK_SLOT(12)
+#else
+#define _AD_TICK_S12
+#endif
+#if ASYNC_DELAY_MAX_SLOTS > 13
+#define _AD_TICK_S13 _AD_TICK_SLOT(13)
+#else
+#define _AD_TICK_S13
+#endif
+#if ASYNC_DELAY_MAX_SLOTS > 14
+#define _AD_TICK_S14 _AD_TICK_SLOT(14)
+#else
+#define _AD_TICK_S14
+#endif
+#if ASYNC_DELAY_MAX_SLOTS > 15
+#define _AD_TICK_S15 _AD_TICK_SLOT(15)
+#else
+#define _AD_TICK_S15
+#endif
 
 #define _AD_TICK_SWEEP()                                                      \
     _AD_TICK_SLOT(0)                                                          \
-    _AD_TICK_S1 _AD_TICK_S2 _AD_TICK_S3                                       \
-    _AD_TICK_S4 _AD_TICK_S5 _AD_TICK_S6 _AD_TICK_S7
+    _AD_TICK_S1  _AD_TICK_S2  _AD_TICK_S3  _AD_TICK_S4                        \
+    _AD_TICK_S5  _AD_TICK_S6  _AD_TICK_S7  _AD_TICK_S8                        \
+    _AD_TICK_S9  _AD_TICK_S10 _AD_TICK_S11 _AD_TICK_S12                       \
+    _AD_TICK_S13 _AD_TICK_S14 _AD_TICK_S15
 
 #else   /* !ASYNC_DELAY_OPT_UNROLL_TICK */
 
@@ -873,11 +1071,11 @@ static void _async_delay_expire_slot(unsigned char i, unsigned char clr)
         unsigned char i;                                                      \
         for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)                           \
         {                                                                     \
-            if (_ad_m & (unsigned char)(1 << i))                              \
+            if (_ad_m & (async_mask_t)(1 << i))                               \
             {                                                                 \
                 if (_ASYNC_REACHED(_ad_now, _AD_TARGET(i)))                   \
                     _async_delay_expire_slot(i,                               \
-                                             (unsigned char)~(1 << i));       \
+                                             (async_mask_t)~(1 << i));        \
             }                                                                 \
         }                                                                     \
     }
@@ -906,8 +1104,8 @@ static void _async_delay_expire_slot(unsigned char i, unsigned char clr)
 // ISR context; interrupts are already off.
 static void _async_delay_tick_walk(void)
 {
-    async_tick_t  _ad_now;
-    unsigned char _ad_m;
+    async_tick_t _ad_now;
+    async_mask_t _ad_m;
 
     // Read each volatile once. Without this the per-slot compares below would
     // reload the counter with LDS/LDS every time (4 cycles x slot).
@@ -951,8 +1149,8 @@ static void async_delay_tick(void)
     // SPLIT_TICK=0: single-function shape with the locals hoisted here, for
     // A/B measurement against the split above. Same behavior, but the
     // __SAVELOCR spill is charged to idle ticks too.
-    async_tick_t  _ad_now;
-    unsigned char _ad_m;
+    async_tick_t _ad_now;
+    async_mask_t _ad_m;
 
     _ad_now = (async_tick_t)(_async_tick_counter + 1);
     _async_tick_counter = _ad_now;
@@ -982,7 +1180,7 @@ static void async_delay_tick(void)
             // the range, the delay has elapsed. Stays correct across a 16/32-bit
             // counter wrap as long as the delay is shorter than half the range.
             if (_ASYNC_REACHED(_ad_now, _AD_TARGET(i)))
-                _async_delay_expire_slot(i, (unsigned char)~(1 << i));
+                _async_delay_expire_slot(i, (async_mask_t)~(1 << i));
         }
     }
 #endif
@@ -996,7 +1194,8 @@ static void async_delay_tick(void)
 // collapse into a single call (one bit is one bit).
 static void async_delay_poll(void)
 {
-    unsigned char p, i;
+    async_mask_t  p;
+    unsigned char i;
 #if ASYNC_DELAY_FIX_ATOMIC_MASK
     _ASYNC_CRIT_DECL
 #endif
@@ -1015,7 +1214,7 @@ static void async_delay_poll(void)
 
     for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)
     {
-        if (p & (unsigned char)(1 << i))
+        if (p & (async_mask_t)(1 << i))
         {
             if (_AD_CB(i) != (void *)0)
                 _AD_CB(i)(i);
