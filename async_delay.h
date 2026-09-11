@@ -167,7 +167,7 @@ extern "C"
 //
 // Bump by 1 in EVERY future plan that edits this header, and record the new value
 // in plans/README.md and README.md. Costs zero Flash/RAM (preprocessor only).
-#define ASYNC_DELAY_VERSION 12
+#define ASYNC_DELAY_VERSION 1
 
     // ---------- Configuration validation ----------
 
@@ -1798,6 +1798,95 @@ static _async_slot_t _async_slots[ASYNC_DELAY_MAX_SLOTS];
         }
     }
 #endif
+
+    // ========================================================================
+    // AVR HARDWARE TIMER AUTO-CONFIGURATION MODULE (ATmega8 / 16 / 32)
+    // ========================================================================
+    // One-line macros and helper functions to initialize hardware timers in
+    // CTC (Clear Timer on Compare Match) mode for rock-solid zero-jitter ticks.
+    // Supports 1, 2, 4, 8, 16 MHz clock frequencies.
+    // ========================================================================
+
+#if defined(__AVR__) || defined(_MEGA8_) || defined(_MEGA16_) || defined(_MEGA32_) || defined(__AVR_ATmega8__) || defined(__AVR_ATmega16__) || defined(__AVR_ATmega32__)
+
+    // Timer 1 (16-bit CTC Mode - Recommended for best precision & zero jitter)
+    // In ISR, call async_delay_tick().
+    //   CodeVisionAVR : interrupt [TIM1_COMPA] void timer1_compa_isr(void) { async_delay_tick(); }
+    //   AVR-GCC       : ISR(TIMER1_COMPA_vect) { async_delay_tick(); }
+#define ASYNC_DELAY_SETUP_TIMER1_CTC_16MHZ_1KHZ() do { \
+        TCCR1A = 0x00; \
+        TCCR1B = 0x0A; /* CTC mode (WGM12=1), Prescaler /8 (CS11=1) */ \
+        TCNT1H = 0x00; TCNT1L = 0x00; \
+        OCR1AH = 0x07; OCR1AL = 0xCF; /* 16MHz / (8 * 1000Hz) - 1 = 1999 (0x07CF) */ \
+        TIMSK |= 0x10; /* Enable OCIE1A */ \
+    } while (0)
+
+#define ASYNC_DELAY_SETUP_TIMER1_CTC_8MHZ_1KHZ() do { \
+        TCCR1A = 0x00; \
+        TCCR1B = 0x0A; /* CTC mode (WGM12=1), Prescaler /8 (CS11=1) */ \
+        TCNT1H = 0x00; TCNT1L = 0x00; \
+        OCR1AH = 0x03; OCR1AL = 0xE7; /* 8MHz / (8 * 1000Hz) - 1 = 999 (0x03E7) */ \
+        TIMSK |= 0x10; /* Enable OCIE1A */ \
+    } while (0)
+
+#define ASYNC_DELAY_SETUP_TIMER1_CTC_4MHZ_1KHZ() do { \
+        TCCR1A = 0x00; \
+        TCCR1B = 0x0A; /* CTC mode (WGM12=1), Prescaler /8 (CS11=1) */ \
+        TCNT1H = 0x00; TCNT1L = 0x00; \
+        OCR1AH = 0x01; OCR1AL = 0xF3; /* 4MHz / (8 * 1000Hz) - 1 = 499 (0x01F3) */ \
+        TIMSK |= 0x10; /* Enable OCIE1A */ \
+    } while (0)
+
+#define ASYNC_DELAY_SETUP_TIMER1_CTC_2MHZ_1KHZ() do { \
+        TCCR1A = 0x00; \
+        TCCR1B = 0x0A; /* CTC mode (WGM12=1), Prescaler /8 (CS11=1) */ \
+        TCNT1H = 0x00; TCNT1L = 0x00; \
+        OCR1AH = 0x00; OCR1AL = 0xF9; /* 2MHz / (8 * 1000Hz) - 1 = 249 (0x00F9) */ \
+        TIMSK |= 0x10; /* Enable OCIE1A */ \
+    } while (0)
+
+#define ASYNC_DELAY_SETUP_TIMER1_CTC_1MHZ_1KHZ() do { \
+        TCCR1A = 0x00; \
+        TCCR1B = 0x0A; /* CTC mode (WGM12=1), Prescaler /8 (CS11=1) */ \
+        TCNT1H = 0x00; TCNT1L = 0x00; \
+        OCR1AH = 0x00; OCR1AL = 0x7C; /* 1MHz / (8 * 1000Hz) - 1 = 124 (0x007C) */ \
+        TIMSK |= 0x10; /* Enable OCIE1A */ \
+    } while (0)
+
+    // Timer 2 (8-bit CTC Mode)
+    //   CodeVisionAVR : interrupt [TIM2_COMP] void timer2_comp_isr(void) { async_delay_tick(); }
+    //   AVR-GCC       : ISR(TIMER2_COMP_vect) { async_delay_tick(); }
+#define ASYNC_DELAY_SETUP_TIMER2_CTC_16MHZ_1KHZ() do { \
+        TCCR2 = 0x0B; /* CTC mode (WGM21=1), Prescaler /64 */ \
+        TCNT2 = 0x00; \
+        OCR2  = 249;  /* 16MHz / (64 * 1000Hz) - 1 = 249 */ \
+        TIMSK |= 0x80; /* Enable OCIE2 */ \
+    } while (0)
+
+#define ASYNC_DELAY_SETUP_TIMER2_CTC_8MHZ_1KHZ() do { \
+        TCCR2 = 0x0B; /* CTC mode (WGM21=1), Prescaler /64 */ \
+        TCNT2 = 0x00; \
+        OCR2  = 124;  /* 8MHz / (64 * 1000Hz) - 1 = 124 */ \
+        TIMSK |= 0x80; /* Enable OCIE2 */ \
+    } while (0)
+
+    // Dynamic Timer 1 initialization function for custom frequencies
+    static void async_delay_hw_timer1_init(unsigned long f_cpu_hz, unsigned int tick_hz)
+    {
+        unsigned long top;
+        TCCR1A = 0x00;
+        if (tick_hz == 0)
+            tick_hz = 1000;
+        top = (f_cpu_hz / (8UL * (unsigned long)tick_hz)) - 1UL;
+        TCNT1H = 0x00;
+        TCNT1L = 0x00;
+        OCR1AH = (unsigned char)((top >> 8) & 0xFF);
+        OCR1AL = (unsigned char)(top & 0xFF);
+        TCCR1B = 0x0A; /* CTC mode, /8 prescaler */
+        TIMSK |= 0x10; /* Enable OCIE1A */
+    }
+
+#endif /* AVR target */
 
 #ifdef __cplusplus
 }

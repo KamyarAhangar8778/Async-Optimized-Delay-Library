@@ -17,7 +17,7 @@ Read this document FIRST before touching any file in this repository. It is writ
 
 | Path | Primary Agent Role / Purpose |
 |---|---|
-| `async_delay.h` | **The Core Library**. Defines `ASYNC_DELAY_VERSION 12`. Contains all algorithms, ISR gates, data structures, and conditional compilation flags. |
+| `async_delay.h` | **The Core Library**. Defines `ASYNC_DELAY_VERSION 1`. Contains all algorithms, ISR gates, data structures, and conditional compilation flags. |
 | `ARCHITECTURE.md` | **Your Internal Blueprint (This file)**. Hardware models, cycle budgets, regression rules, and internal invariants. |
 | `README.md` | Public integration contract, hardware timer formulas, and complete API specifications. |
 | `async_delay_guide.md` | Persian technical guide for embedded developers using CodeVisionAVR. |

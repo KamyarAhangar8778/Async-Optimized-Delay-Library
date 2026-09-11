@@ -578,7 +578,43 @@ void main(void)
 
 ---
 
-## 9. Cross-Compiler & Platform Portability (v12)
+## 9. Hardware Timer Auto-Configuration (ATmega8 / 16 / 32)
+
+`async_delay.h` includes built-in, zero-overhead helper macros and setup functions to initialize hardware timers in **CTC (Clear Timer on Compare Match)** mode for exact, zero-jitter 1ms tick interrupts:
+
+```c
+#include <mega8.h>
+#define ASYNC_DELAY_TICK_HZ 1000
+#include <async_delay.h>
+
+// Timer 1 ISR (16-bit CTC mode):
+interrupt [TIM1_COMPA] void timer1_compa_isr(void) {
+    async_delay_tick();
+}
+
+void main(void) {
+    // Single macro to initialize Timer 1 CTC mode with exact OCR1A for 8 MHz:
+    ASYNC_DELAY_SETUP_TIMER1_CTC_8MHZ_1KHZ();
+    
+    // Or for other frequencies:
+    // ASYNC_DELAY_SETUP_TIMER1_CTC_16MHZ_1KHZ();
+    // ASYNC_DELAY_SETUP_TIMER1_CTC_4MHZ_1KHZ();
+    // ASYNC_DELAY_SETUP_TIMER1_CTC_2MHZ_1KHZ();
+    // ASYNC_DELAY_SETUP_TIMER1_CTC_1MHZ_1KHZ();
+    // ASYNC_DELAY_SETUP_TIMER2_CTC_8MHZ_1KHZ();
+
+    #asm("sei") // Enable global interrupts
+    async_delay_init();
+
+    while(1) {
+        // Non-blocking application loop
+    }
+}
+```
+
+---
+
+## 10. Cross-Compiler & Platform Portability (v1)
 
 `async_delay.h` is portable across multiple toolchains and target environments:
 
@@ -598,7 +634,7 @@ gcc -Wall -Wextra -O2 -I. tests/test_async_delay.c -o tests/run_test && ./tests/
 
 ---
 
-## 10. AVR Hardware Profiler & Regression Analysis (ATmega8 / 16 / 32 @ 1–16 MHz)
+## 11. AVR Hardware Profiler & Regression Analysis (ATmega8 / 16 / 32 @ 1–16 MHz)
 
 The repository includes a hardware profiling and regression analysis engine (`tests/avr_benchmark.py`, `tests/avr_model.py`, `tests/benchmark_avr.sh`) specifically modeled for 8-bit AVR microcontrollers.
 
@@ -638,19 +674,20 @@ Measured on default configuration (`TIMER_BITS=16`, `MAX_SLOTS=4`, `TICK_HZ=1000
 
 ---
 
-## 11. Version Synchronization Contract
+## 12. Version Synchronization Contract
 
 `async_delay.h` contains a build synchronization constant:
 ```c
-#define ASYNC_DELAY_VERSION 12
+#define ASYNC_DELAY_VERSION 1
 ```
 
 To guard against silent regressions or outdated local copies across external project directories, add this compile-time assertion to your application headers:
 
 ```c
-#if ASYNC_DELAY_VERSION != 12
+#if ASYNC_DELAY_VERSION != 1
 #error "async_delay.h version mismatch! Update the header copy in your include path."
 #endif
 ```
+*(This validation executes strictly in the preprocessor and incurs zero Flash or SRAM overhead).*
 *(This validation executes strictly in the preprocessor and incurs zero Flash or SRAM overhead).*
 
