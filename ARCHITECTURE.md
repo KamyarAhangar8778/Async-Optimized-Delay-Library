@@ -22,15 +22,13 @@ timer ISR; the app either gets a callback or polls.
 
 | File | Role |
 |------|------|
-| `async_delay.h` | The library. Only file you normally edit. ~1000 lines (config-heavy; most of it is `#if` variants + comments). |
-| `README.md` | The **usage contract** — written so the library can be dropped into an unrelated project with this file as the only reference. Update it whenever the API, flags, or limits change. |
-| `async_delay_test.c` | Test project: ATmega8 @ 8MHz, Timer2 CTC 1ms tick, LCD + LEDs. |
-| `async_delay_guide.md` | Persian usage guide (timers, OCR tables, CodeWizard). Human-facing, lower priority for edits. |
-| `async_delay_test.prj` | CodeVisionAVR project file. |
-| `ARCHITECTURE.md` | This file. |
-| `CLAUDE.md` | Project rules (section 9). |
-| `plans/` | Numbered implementation plans with their measurements and rejected alternatives. `plans/README.md` is the index; read the relevant plan before re-touching an area it covers. |
-| `tests/` | Host-side test harness (plan 006): gcc-compiled real-header tests + static `#if` checker. See §8.5 before touching the tick, masks, or `_ASYNC_REACHED`. |
+| `async_delay.h` | The library. Only file you normally edit. ~1000 lines (config-heavy; most of it is `#if` variants + comments). Defines `ASYNC_DELAY_VERSION 7`. |
+| `README.md` | The **usage contract** — definitive specification for AI Agents and firmware developers. Contains complete configuration flags, CTC hardware formulas, concurrency contracts, code patterns, and troubleshooting matrix. |
+| `async_delay_test.c` | Reference firmware test project: ATmega8 @ 8MHz, Timer2 CTC 1ms tick, LCD + LEDs, exercising one-shot, polling, cancellation, and deferred callbacks. |
+| `async_delay_guide.md` | Comprehensive Persian guide updated for v7 (CTC timer calculation, CodeWizard hex values, deferred callbacks, polling leak prevention, and multi-file architecture). |
+| `ARCHITECTURE.md` | This file: internal engineering invariants, hardware design rationale, cycle-budget models, and historical defect mitigations. |
+| `CLAUDE.md` | Project development guidelines and constraints. |
+| `tests/` | Permanent host-side test harness: gcc-compiled real-header tests (`make_host.py`) + static `#if` checker (`check_flags.py`). See §8.5 before modifying the tick, masks, or `_ASYNC_REACHED`. |
 
 ---
 
