@@ -1,0 +1,27 @@
+{
+  "label": "CURRENT",
+  "version": 12,
+  "max_slots": 4,
+  "timer_bits": 16,
+  "tick_hz": 1000,
+  "static_ram_bytes": 34,
+  "avr_cycles": {
+    "idle_tick": 12,
+    "active_tick_4slots": 20,
+    "active_tick_16slots": 20,
+    "start": 28,
+    "cancel_fast": 18,
+    "cancel_slow": 42,
+    "restart": 26,
+    "active_count": 5,
+    "ticks_until_next": 16
+  },
+  "host_latency_ns": {
+    "idle_tick": 2.44,
+    "active_tick": 2.44,
+    "start_cancel": 11.32,
+    "restart": 3.81,
+    "active_count": 0.32,
+    "remaining": 2.21
+  }
+}

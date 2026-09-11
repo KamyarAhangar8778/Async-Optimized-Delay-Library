@@ -481,9 +481,9 @@ The allocation loop now maintains `slotbit = 1` and shifts `slotbit <<= 1` on ea
 | Slot overflow (5th start) | all 4 slots busy | returns `0xFF` |
 | `loop_count` (unsigned long) | main loop | proves loop is never blocked |
 
-### 8.1 Host Unit Test Suite & Automated CI
+### 8.1 Host Unit Test Suite, AVR Benchmarking & Automated CI
 
-The repository contains a native host-based test suite (`tests/test_async_delay.c`, `tests/test_stress.c`, and `tests/benchmark_cycles.c`) with a multi-configuration test runner (`tests/run_all_configs.sh`) and continuous integration workflow (`.github/workflows/ci.yml`).
+The repository contains a native host-based test suite (`tests/test_async_delay.c`, `tests/test_stress.c`, and `tests/benchmark_cycles.c`) along with the AVR Microcontroller Benchmark & Regression Engine (`tests/avr_benchmark.py`, `tests/avr_model.py`, `tests/benchmark_avr.sh`) with a multi-configuration test runner (`tests/run_all_configs.sh`) and continuous integration workflow (`.github/workflows/ci.yml`).
 
 The test suite validates:
 - Initialization and clean reset
@@ -499,6 +499,30 @@ The test suite validates:
 - Slot exhaustion, memory reuse, and leak prevention
 - Zero-overhead compile-time LUT bitmask verification
 - Native CPU throughput & operation latency profiling
+
+### 8.2 AVR Microcontroller Benchmarking & Before/After Regression Workflow
+
+The AVR benchmark suite models **ATmega8**, **ATmega16**, and **ATmega32** across **1, 2, 4, 8, and 16 MHz** clock frequencies.
+
+**Commands:**
+```bash
+# 1. Save current baseline state before modifying the library:
+bash tests/benchmark_avr.sh --save
+
+# 2. Make code edits in async_delay.h ...
+
+# 3. Compare modified code against baseline to verify improvements and detect regressions:
+bash tests/benchmark_avr.sh --diff
+
+# 4. Run the full configuration and stress test matrix:
+bash tests/run_all_configs.sh
+```
+
+The tool reports:
+- **AVR Execution Latency**: Microsecond execution times at 1, 2, 4, 8, 16 MHz.
+- **Timer ISR CPU Overhead %**: Percentage of total MCU CPU consumed at 1 kHz tick rate.
+- **MCU Footprint**: Exact static SRAM bytes and utilization % for ATmega8 (1KB), ATmega16 (1KB), ATmega32 (2KB).
+- **Before vs After Delta**: Highlights exact cycle differences, flagging regressions in red and improvements in green.
 
 Every commit is tested against the matrix: Default (16-bit), 8-bit/8-slots, 32-bit/16-slots, Deferred Callbacks, Split Arrays, Polling-Only Footprint, and Unoptimized fallbacks.
 

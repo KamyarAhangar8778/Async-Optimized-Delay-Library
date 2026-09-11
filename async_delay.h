@@ -1380,10 +1380,34 @@ static _async_slot_t _async_slots[ASYNC_DELAY_MAX_SLOTS];
     static void async_delay_cancel_all(void)
     {
         unsigned char i;
+#if ASYNC_DELAY_FIX_ATOMIC_MASK
+        _ASYNC_CRIT_DECL
+        _ASYNC_SAVE_SREG();
+#if defined(__GNUC__) || defined(__clang__)
+        _ASYNC_ASM_CLI();
+#else
+#asm("cli")
+#endif
+#endif
+#if ASYNC_DELAY_OPT_BITMASK
+        _async_active_mask = 0;
+#endif
+#if ASYNC_DELAY_FIX_USED_MASK
+        _async_used_mask = 0;
+#endif
+#if ASYNC_DELAY_DEFERRED_CALLBACKS
+        _async_pending_mask = 0;
+#endif
+#if ASYNC_DELAY_OPT_NEXT_TARGET
+        _async_next_target = 0;
+#endif
         for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)
         {
-            async_delay_cancel(i);
+            _AD_FLAGS(i) = ASYNC_SLOT_FREE;
         }
+#if ASYNC_DELAY_FIX_ATOMIC_MASK
+        _ASYNC_REST_SREG();
+#endif
     }
 
     // ISR-context: process slot i that has been confirmed expired.

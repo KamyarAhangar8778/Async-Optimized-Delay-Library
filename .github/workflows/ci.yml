@@ -13,10 +13,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up GCC compiler
-        run: sudo apt-get update && sudo apt-get install -y gcc
+      - name: Set up GCC and Python
+        run: sudo apt-get update && sudo apt-get install -y gcc python3
 
-      - name: Run Host Test Matrix
+      - name: Run Host Test Matrix & AVR Benchmarks
         run: |
           chmod +x tests/run_all_configs.sh
+          chmod +x tests/benchmark_avr.sh
           ./tests/run_all_configs.sh
+          python3 tests/avr_benchmark.py

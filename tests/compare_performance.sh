@@ -72,5 +72,9 @@ GAIN_POP=$(calc_gain_pct "$B_POP_NS" "$O_POP_NS")
 printf "%-27s | %5.2f ns (%5.1fM) | %5.2f ns (%5.1fM) | %9s | %s\n" "async_delay_active_count()" "$B_POP_NS" "$B_POP_MOPS" "$O_POP_NS" "$O_POP_MOPS" "$SPEEDUP_POP" "$GAIN_POP"
 
 echo "================================================================================"
-echo "  [OK] Performance differential verified."
+echo "  [OK] Host throughput performance verified."
 echo "================================================================================"
+
+echo -e "\n>>> AVR Microcontroller Cycle & Frequency Regression Analysis (ATmega8/16/32 @ 1-16 MHz) <<<"
+python3 tests/avr_benchmark.py --compare
+
