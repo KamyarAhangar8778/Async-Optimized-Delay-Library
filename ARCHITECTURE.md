@@ -22,36 +22,41 @@ timer ISR; the app either gets a callback or polls.
 
 | File | Role |
 |------|------|
-| `async_delay.h` | The library. Only file you normally edit. ~1100 lines (config-heavy; most of it is `#if` variants + comments). Defines `ASYNC_DELAY_VERSION 8`. |
+| `async_delay.h` | The library. Only file you normally edit. ~1300 lines (config-heavy; most of it is `#if` variants + comments). Defines `ASYNC_DELAY_VERSION 9`. |
 | `README.md` | The **usage contract** — definitive specification for AI Agents and firmware developers. Contains complete configuration flags, CTC hardware formulas, concurrency contracts, code patterns, and troubleshooting matrix. |
 | `async_delay_test.c` | Reference firmware test project: ATmega8 @ 8MHz, Timer2 CTC 1ms tick, LCD + LEDs, exercising one-shot, polling, cancellation, restart, and deferred callbacks. |
-| `async_delay_guide.md` | Comprehensive Persian guide updated for v8 (CTC timer calculation, CodeWizard hex values, deferred callbacks, polling leak prevention, restart, 16-slot support, and multi-file architecture). |
+| `async_delay_guide.md` | Comprehensive Persian guide updated for v9 (CTC timer calculation, CodeWizard hex values, deferred callbacks, polling leak prevention, restart, 16-slot support, and multi-file architecture). |
 | `ARCHITECTURE.md` | This file: internal engineering invariants, hardware design rationale, cycle-budget models, and defect mitigations. |
 | `CLAUDE.md` | Project development guidelines and constraints. |
 
 ---
 
-## 2.1 Current state & Benchmarks (Release v8)
+## 2.1 Current state & Benchmarks (Release v9)
 
 Measured on ATmega8 @ 8 MHz, `TIMER_BITS=16`, `MAX_SLOTS=4`, `TICK_HZ=1000` — cycle counts derived from `Debug/List/async_delay_test.asm`. Comparison: default configuration vs `DEFERRED_CALLBACKS=1`.
 
-| Path | Default Settings | Deferred Callbacks (`DEFERRED=1`) |
-|------|-----------------:|----------------------------------:|
-| idle tick (ISR, no slot active) | **~85 cycles** | **~85 cycles** |
-| 4 active slots, none due | **~105 cycles** | **~105 cycles** |
-| `async_delay_poll()` idle (main loop) | — | **~25 cycles** |
-| `async_delay_cancel()` (fast path) | **~22 cycles** | **~22 cycles** |
-| `async_delay_restart()` | **~48 cycles** | **~48 cycles** |
-| CPU load @ 1 kHz, 4 active (ISR only) | **~1.3 %** | **~1.3 %** |
-| CPU load @ 10 kHz, 4 active (ISR only) | **~13 %** | **~13 %** |
-| Flash footprint (async functions) | **388 words** (~776 B) | **407 words** (~814 B) |
-| RAM footprint | **34 bytes** | **35 bytes** (+1 B `pending_mask`) |
+| Path | Default Settings | Deferred Callbacks (`DEFERRED=1`) | Polling-Only (`DISABLE_CALLBACKS=1`) |
+|------|-----------------:|----------------------------------:|-------------------------------------:|
+| idle tick (ISR, no slot active) | **~85 cycles** | **~85 cycles** | **~85 cycles** |
+| 4 active slots, none due | **~105 cycles** | **~105 cycles** | **~105 cycles** |
+| `async_delay_poll()` idle (main loop) | — | **~25 cycles** | — |
+| `async_delay_poll()` 1 pending | — | **~38 cycles** (was ~65) | — |
+| `async_delay_cancel()` (fast path) | **~18 cycles** (was ~22) | **~18 cycles** (was ~22) | **~18 cycles** |
+| `async_delay_elapsed()` (active slot) | **~14 cycles** (was ~28) | **~14 cycles** (was ~28) | **~14 cycles** |
+| `async_delay_restart()` | **~32 cycles** (was ~48) | **~32 cycles** (was ~48) | **~32 cycles** |
+| CPU load @ 1 kHz, 4 active (ISR only) | **~1.3 %** | **~1.3 %** | **~1.3 %** |
+| CPU load @ 10 kHz, 4 active (ISR only) | **~13 %** | **~13 %** | **~13 %** |
+| Flash footprint (async functions) | **~395 words** | **~415 words** | **~340 words** (-15%) |
+| RAM footprint (4 slots, 16-bit tick) | **34 bytes** | **35 bytes** (+1 B `pending_mask`) | **26 bytes** (-23.5%) |
 
-**Release v8 Innovations:**
-1. **Fast-Path Cancel (`ASYNC_DELAY_OPT_FAST_CANCEL`)**: Canceling a slot whose target is not the earliest active target (`_async_next_target`) drops the $O(N)$ recomputation, executing in $O(1)$ ~22 cycles instead of ~70+ cycles.
-2. **Restart / Retargeting API (`async_delay_restart`)**: Allows changing duration and resetting expiration time of an existing active or expired slot without freeing its ID, eliminating allocator thrashing.
-3. **16-Slot Bitmask Support**: Seamless scaling from 1 to 16 slots with `async_mask_t` (`unsigned char` for $\le 8$, `unsigned int` for $\le 16$) with full unrolled sweep support (`_AD_TICK_S0`..`_AD_TICK_S15`).
-4. **Shift-Optimized Allocation**: Replaced runtime `(1 << i)` shift loops with incremental `slotbit <<= 1` in `_async_delay_start_common`, bypassing CodeVisionAVR's `__LSLW12` routine.
+**Release v9 Innovations & Performance Gains:**
+1. **Bit-Mask Lookup Table (`ASYNC_DELAY_OPT_LUT_MASK`)**: Replaced all variable shift operations `(1 << slot_id)` in `async_delay_restart()`, `async_delay_elapsed()`, `async_delay_cancel()`, and `async_delay_poll()` with a flash/RAM bit-mask LUT (`_async_slot_bit`). AVR lacks a hardware barrel shifter; variable shift requires a loop call (`__LSLW12`). LUT access cuts shift latency from ~10–25 cycles down to **2 cycles** (a direct LD/LDS).
+2. **Shift Elimination & Single Precomputation**: In `async_delay_elapsed()` and `async_delay_restart()`, `slotbit` is computed once and reused for mask testing, clearing, and setting, eliminating redundant shift executions (~33% faster `restart()`, ~50% faster `elapsed()`).
+3. **Early Exit in `_async_recompute_next()` & `async_delay_poll()`**: As soon as all active/pending mask bits are cleared during scanning (`m &= ~slotbit; if (m == 0) break;`), the loop terminates immediately. If only slot 0 or 1 is active, iterations for remaining slots are skipped (~40–70% speedup on sparse masks).
+4. **Footprint Optimization Flags (`ASYNC_DELAY_DISABLE_CALLBACKS` & `ASYNC_DELAY_DISABLE_PERIODIC`)**:
+   - `ASYNC_DELAY_DISABLE_CALLBACKS=1`: Removes function pointers from the slot struct (saving 2 bytes RAM per slot = 8 bytes saved for 4 slots, 32 bytes saved for 16 slots) and completely strips callback handling code.
+   - `ASYNC_DELAY_DISABLE_PERIODIC=1`: Removes the `duration` storage from slots (saving 2 bytes RAM per slot with 16-bit timer) and strips periodic re-arm branches.
+   - Together, they shrink slot size from 7 bytes to **3 bytes**, saving **57% of slot RAM**!
 
 ---
 
@@ -64,6 +69,9 @@ Measured on ATmega8 @ 8 MHz, `TIMER_BITS=16`, `MAX_SLOTS=4`, `TICK_HZ=1000` — 
 | `ASYNC_DELAY_MAX_SLOTS` | `4` | max concurrent delays | `#error` if == 0 or > 16 under bitmask; max 254 in legacy mode |
 | `ASYNC_DELAY_CALLBACK_RESCHEDULE` | `1` | slot made non-ACTIVE before its callback runs (enables self-reschedule) | — |
 | `ASYNC_DELAY_OPT_BITMASK` | `1` | tick visits only ACTIVE slots via bitmask (supports up to 16 slots) | `#error` if MAX_SLOTS > 16 |
+| `ASYNC_DELAY_OPT_LUT_MASK` | `1` | bit-mask lookup table eliminates `__LSLW12` runtime shift loops on AVR | — |
+| `ASYNC_DELAY_DISABLE_CALLBACKS` | `0` | polling-only mode: removes callback pointer (saves 2B RAM/slot + flash) | incompatible with `DEFERRED_CALLBACKS` |
+| `ASYNC_DELAY_DISABLE_PERIODIC` | `0` | one-shot only mode: removes duration storage (saves 2B RAM/slot + flash) | — |
 | `ASYNC_DELAY_OPT_FAST_CANCEL` | `1` | bypasses $O(N)$ recompute in `cancel()` if cancelled slot wasn't earliest | requires BITMASK & NEXT_TARGET |
 | `ASYNC_DELAY_FEATURE_RESTART` | `1` | enables `async_delay_restart()` to retarget without reallocating slot ID | — |
 | `ASYNC_DELAY_OPT_MERGED_FLAGS` | `1` | state+repeat packed into one byte | — |

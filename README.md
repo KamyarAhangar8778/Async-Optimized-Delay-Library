@@ -88,6 +88,9 @@ All settings are configured via preprocessor `#define` directives prior to `#inc
 | `ASYNC_DELAY_FIX_USED_MASK` | `1` | Correctness | Tracks allocated slots separately from running slots. Prevents expired, unpolled slots from being stolen. |
 | `ASYNC_DELAY_FIX_ATOMIC_MASK` | `1` | Concurrency | Protects main-context mask updates with an SREG-preserving critical section (`#asm("cli")`). |
 | `ASYNC_DELAY_OPT_BITMASK` | `1` | Performance | Restricts tick inspections to active slots via bitmask (supports up to 16 slots). |
+| `ASYNC_DELAY_OPT_LUT_MASK` | `1` | Performance | Precomputed bitmask lookup table (`_async_slot_bit`) eliminating AVR `__LSLW12` runtime shift loops. |
+| `ASYNC_DELAY_DISABLE_CALLBACKS` | `0` | Footprint | Polling-only mode. Removes callback pointer from struct, saving 2 bytes RAM per slot (23.5% total RAM reduction for 4 slots). |
+| `ASYNC_DELAY_DISABLE_PERIODIC` | `0` | Footprint | One-shot only mode. Removes duration field from struct, saving 2 bytes RAM per slot. |
 | `ASYNC_DELAY_OPT_NEXT_TARGET` | `1` | Performance | Caches earliest target; enables $O(1)$ early exit in `async_delay_tick()` when no slots are due. |
 | `ASYNC_DELAY_OPT_SPLIT_TICK` | `1` | Performance | Keeps `async_delay_tick()` free of local variables, avoiding CodeVisionAVR's `__SAVELOCR` register spill on idle ticks. |
 | `ASYNC_DELAY_OPT_UNROLL_TICK` | `1` | Performance | Expands slot checks into constant indices (up to 16 slots), eliminating runtime multiplications and bit-shifts. |
