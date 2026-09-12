@@ -80,17 +80,6 @@
 //   active-slot mask test, and a tick where nothing is due yet returns after
 //   ONE wrap-safe compare against the cached earliest target - no matter how
 //   many slots are running.
-//   Optimization flags: ASYNC_DELAY_OPT_BITMASK (1), ASYNC_DELAY_OPT_LUT_MASK (1),
-//   ASYNC_DELAY_OPT_MERGED_FLAGS (1), ASYNC_DELAY_OPT_SPLIT_ARRAYS (0),
-//   ASYNC_DELAY_OPT_UNROLL_TICK (1), ASYNC_DELAY_OPT_NEXT_TARGET (1),
-//   ASYNC_DELAY_OPT_SPLIT_TICK (1), ASYNC_DELAY_OPT_FAST_CANCEL (1).
-//   Footprint flags: ASYNC_DELAY_DISABLE_CALLBACKS (0), ASYNC_DELAY_DISABLE_PERIODIC (0).
-//   Feature flags:
-//   ASYNC_DELAY_FEATURE_RESTART (1).
-//   Correctness flags:
-//   ASYNC_DELAY_FIX_USED_MASK (1), ASYNC_DELAY_FIX_ATOMIC_MASK (1).
-//   Opt-in: ASYNC_DELAY_DEFERRED_CALLBACKS (0).
-//   See plans/003, plans/004 and plans/005 for the full design.
 //
 // ============================================================
 // Quick Start:
@@ -167,7 +156,7 @@ extern "C"
 //
 // Bump by 1 in EVERY future plan that edits this header, and record the new value
 // in plans/README.md and README.md. Costs zero Flash/RAM (preprocessor only).
-#define ASYNC_DELAY_VERSION 1
+#define ASYNC_DELAY_VERSION 5
 
     // ---------- Configuration validation ----------
 
@@ -356,6 +345,13 @@ extern "C"
 //                             Off by default - opt in consciously.
 #ifndef ASYNC_DELAY_DEFERRED_CALLBACKS
 #define ASYNC_DELAY_DEFERRED_CALLBACKS 0
+#endif
+
+// ASYNC_DELAY_FEATURE_SLEEP : 1 = Provide async_delay_sleep_idle() helper
+//                             to safely put AVR MCU into IDLE sleep until
+//                             next timer tick interrupt.
+#ifndef ASYNC_DELAY_FEATURE_SLEEP
+#define ASYNC_DELAY_FEATURE_SLEEP 0
 #endif
 
 // Constraints on the opt combinations:
@@ -696,6 +692,12 @@ static _async_slot_t _async_slots[ASYNC_DELAY_MAX_SLOTS];
             best = _AD_TARGET(n);                         \
             first = 0;                                    \
         }                                                 \
+        m &= (async_mask_t)~_AD_SLOT_BIT(n);              \
+        if (m == 0)                                       \
+        {                                                 \
+            _async_next_target = best;                    \
+            return;                                       \
+        }                                                 \
     }
 
 #if ASYNC_DELAY_MAX_SLOTS > 1
@@ -854,9 +856,11 @@ static _async_slot_t _async_slots[ASYNC_DELAY_MAX_SLOTS];
         async_tick_t now, tgt;
         _ASYNC_CRIT_DECL
 
+        if (duration > _ASYNC_HALF_RANGE)
+            return ASYNC_DELAY_NO_SLOT;
+
 #if ASYNC_DELAY_DISABLE_CALLBACKS
-            (void)
-            callback;
+        (void)callback;
 #endif
 
         // ---- Find a slot that is not ALLOCATED ----
@@ -881,22 +885,18 @@ static _async_slot_t _async_slots[ASYNC_DELAY_MAX_SLOTS];
         i = _async_first_free_nibble[u & 0x0F];
 #if ASYNC_DELAY_MAX_SLOTS > 4
         if (i == 4)
-        {
             i = (unsigned char)(4 + _async_first_free_nibble[(u >> 4) & 0x0F]);
+#endif
 #if ASYNC_DELAY_MAX_SLOTS > 8
-            if (i == 8)
-            {
-                i = (unsigned char)(8 + _async_first_free_nibble[(u >> 8) & 0x0F]);
+        if (i == 8)
+            i = (unsigned char)(8 + _async_first_free_nibble[(u >> 8) & 0x0F]);
+#endif
 #if ASYNC_DELAY_MAX_SLOTS > 12
-                if (i == 12)
-                {
-                    i = (unsigned char)(12 + _async_first_free_nibble[(u >> 12) & 0x0F]);
-                }
+        if (i == 12)
+            i = (unsigned char)(12 + _async_first_free_nibble[(u >> 12) & 0x0F]);
 #endif
-            }
-#endif
-        }
-#endif
+        if (i >= ASYNC_DELAY_MAX_SLOTS)
+            return ASYNC_DELAY_NO_SLOT;
         slotbit = _AD_SLOT_BIT(i);
 #else
         slotbit = 1;
@@ -906,50 +906,51 @@ static _async_slot_t _async_slots[ASYNC_DELAY_MAX_SLOTS];
                 break;
             slotbit <<= 1;
         }
+        if (i >= ASYNC_DELAY_MAX_SLOTS)
+            return ASYNC_DELAY_NO_SLOT;
 #endif
 
 #else
 #if ASYNC_DELAY_OPT_BITMASK
 #if ASYNC_DELAY_OPT_LUT_ALLOC
-    i = _async_first_free_nibble[_async_active_mask & 0x0F];
+        cur_active = _async_active_mask;
+        i = _async_first_free_nibble[cur_active & 0x0F];
 #if ASYNC_DELAY_MAX_SLOTS > 4
-    if (i == 4)
-    {
-        i = (unsigned char)(4 + _async_first_free_nibble[(_async_active_mask >> 4) & 0x0F]);
+        if (i == 4)
+            i = (unsigned char)(4 + _async_first_free_nibble[(cur_active >> 4) & 0x0F]);
+#endif
 #if ASYNC_DELAY_MAX_SLOTS > 8
         if (i == 8)
-        {
-            i = (unsigned char)(8 + _async_first_free_nibble[(_async_active_mask >> 8) & 0x0F]);
+            i = (unsigned char)(8 + _async_first_free_nibble[(cur_active >> 8) & 0x0F]);
+#endif
 #if ASYNC_DELAY_MAX_SLOTS > 12
-            if (i == 12)
-            {
-                i = (unsigned char)(12 + _async_first_free_nibble[(_async_active_mask >> 12) & 0x0F]);
-            }
-#endif
-        }
-#endif
-    }
-#endif
-    slotbit = _AD_SLOT_BIT(i);
-#else
-    slotbit = 1;
-    for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)
-    {
-        if ((_async_active_mask & slotbit) == 0)
-            break;
-        slotbit <<= 1;
-    }
-#endif
-#else
-    for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)
-    {
-        if (_AD_STATE(i) == ASYNC_SLOT_FREE)
-            break;
-    }
-#endif
+        if (i == 12)
+            i = (unsigned char)(12 + _async_first_free_nibble[(cur_active >> 12) & 0x0F]);
 #endif
         if (i >= ASYNC_DELAY_MAX_SLOTS)
             return ASYNC_DELAY_NO_SLOT;
+        slotbit = _AD_SLOT_BIT(i);
+#else
+        slotbit = 1;
+        for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)
+        {
+            if ((_async_active_mask & slotbit) == 0)
+                break;
+            slotbit <<= 1;
+        }
+        if (i >= ASYNC_DELAY_MAX_SLOTS)
+            return ASYNC_DELAY_NO_SLOT;
+#endif
+#else
+        for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)
+        {
+            if (_AD_STATE(i) == ASYNC_SLOT_FREE)
+                break;
+        }
+        if (i >= ASYNC_DELAY_MAX_SLOTS)
+            return ASYNC_DELAY_NO_SLOT;
+#endif
+#endif
 
         // ---- One critical section for the whole shared-state update ----
         // AVR is 8-bit: reading a 16/32-bit volatile variable is NOT atomic. The
@@ -1006,7 +1007,11 @@ static _async_slot_t _async_slots[ASYNC_DELAY_MAX_SLOTS];
 #endif
         _ASYNC_REST_SREG();
 #if !ASYNC_DELAY_FIX_ATOMIC_MASK && ASYNC_DELAY_TIMER_BITS >= 16
+#if defined(__GNUC__) || defined(__clang__)
+        sei();
+#else
 #asm("sei")
+#endif
 #endif
         return i;
     }
@@ -1047,7 +1052,7 @@ static _async_slot_t _async_slots[ASYNC_DELAY_MAX_SLOTS];
         async_tick_t now, tgt;
         _ASYNC_CRIT_DECL
 
-        if (slot_id >= ASYNC_DELAY_MAX_SLOTS)
+        if (slot_id >= ASYNC_DELAY_MAX_SLOTS || new_duration > _ASYNC_HALF_RANGE)
             return 0;
 
         slotbit = _AD_SLOT_BIT(slot_id);
@@ -1254,34 +1259,57 @@ static _async_slot_t _async_slots[ASYNC_DELAY_MAX_SLOTS];
     // Return the total count of currently active delays.
     static unsigned char async_delay_active_count(void)
     {
-        unsigned char count = 0;
+        unsigned char count;
 #if ASYNC_DELAY_OPT_BITMASK
-        async_mask_t m = _async_active_mask;
+        async_mask_t m;
+#if ASYNC_DELAY_MAX_SLOTS > 8 && ASYNC_DELAY_FIX_ATOMIC_MASK
+        _ASYNC_CRIT_DECL
+#endif
+#endif
+#if !ASYNC_DELAY_OPT_BITMASK
+        unsigned char i;
+#endif
+
+#if ASYNC_DELAY_OPT_BITMASK
+#if ASYNC_DELAY_MAX_SLOTS > 8 && ASYNC_DELAY_FIX_ATOMIC_MASK
+        _ASYNC_SAVE_SREG();
+#if defined(__GNUC__) || defined(__clang__)
+        _ASYNC_ASM_CLI();
+#else
+#asm("cli")
+#endif
+        m = _async_active_mask;
+        _ASYNC_REST_SREG();
+#else
+        m = _async_active_mask;
+#endif
+
 #if ASYNC_DELAY_OPT_LUT_POPCOUNT
         count = _async_popcount_nibble[m & 0x0F];
 #if ASYNC_DELAY_MAX_SLOTS > 4
-        count += _async_popcount_nibble[(m >> 4) & 0x0F];
+        count = (unsigned char)(count + _async_popcount_nibble[(m >> 4) & 0x0F]);
+#endif
 #if ASYNC_DELAY_MAX_SLOTS > 8
-        count += _async_popcount_nibble[(m >> 8) & 0x0F];
+        count = (unsigned char)(count + _async_popcount_nibble[(m >> 8) & 0x0F]);
+#endif
 #if ASYNC_DELAY_MAX_SLOTS > 12
-        count += _async_popcount_nibble[(m >> 12) & 0x0F];
-#endif
-#endif
+        count = (unsigned char)(count + _async_popcount_nibble[(m >> 12) & 0x0F]);
 #endif
 #else
+        count = 0;
         while (m)
         {
-            count += (unsigned char)(m & 1);
+            count = (unsigned char)(count + (m & 1));
             m >>= 1;
         }
 #endif
 #else
-    unsigned char i;
-    for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)
-    {
-        if (_AD_STATE(i) == ASYNC_SLOT_ACTIVE)
-            count++;
-    }
+        count = 0;
+        for (i = 0; i < ASYNC_DELAY_MAX_SLOTS; i++)
+        {
+            if (_AD_STATE(i) == ASYNC_SLOT_ACTIVE)
+                count++;
+        }
 #endif
         return count;
     }
@@ -1330,11 +1358,6 @@ static _async_slot_t _async_slots[ASYNC_DELAY_MAX_SLOTS];
         unsigned char i, first = 1;
 #endif
 
-#if ASYNC_DELAY_OPT_BITMASK
-        if (_async_active_mask == 0)
-            return 0;
-#endif
-
 #if ASYNC_DELAY_TIMER_BITS >= 16 || ASYNC_DELAY_FIX_ATOMIC_MASK
         _ASYNC_SAVE_SREG();
 #if defined(__GNUC__) || defined(__clang__)
@@ -1342,6 +1365,16 @@ static _async_slot_t _async_slots[ASYNC_DELAY_MAX_SLOTS];
 #else
 #asm("cli")
 #endif
+#endif
+
+#if ASYNC_DELAY_OPT_BITMASK
+        if (_async_active_mask == 0)
+        {
+#if ASYNC_DELAY_TIMER_BITS >= 16 || ASYNC_DELAY_FIX_ATOMIC_MASK
+            _ASYNC_REST_SREG();
+#endif
+            return 0;
+        }
 #endif
         now = _async_tick_counter;
 #if ASYNC_DELAY_OPT_NEXT_TARGET
@@ -1375,6 +1408,32 @@ static _async_slot_t _async_slots[ASYNC_DELAY_MAX_SLOTS];
             return 0;
         return (async_tick_t)(next_tgt - now);
     }
+
+#if ASYNC_DELAY_FEATURE_SLEEP
+#if defined(__AVR__)
+#include <avr/sleep.h>
+    // Atomically enter AVR IDLE sleep mode until the next timer tick interrupt.
+    static void async_delay_sleep_idle(void)
+    {
+        set_sleep_mode(SLEEP_MODE_IDLE);
+        sleep_enable();
+#if defined(__GNUC__) || defined(__clang__)
+        sei();
+        sleep_cpu();
+#else
+#asm("sei")
+#asm("sleep")
+#endif
+        sleep_disable();
+    }
+#else
+    // Host simulation fallback for sleep_idle
+    static void async_delay_sleep_idle(void)
+    {
+        (void)0;
+    }
+#endif
+#endif
 
     // Cancel all active and allocated delays in one call.
     static void async_delay_cancel_all(void)
@@ -1535,11 +1594,11 @@ static _async_slot_t _async_slots[ASYNC_DELAY_MAX_SLOTS];
 // slot instead of ~13.
 // Do NOT introduce a runtime-indexed caller; it silently undoes all of it.
 #define _AD_TICK_SLOT(n)                                          \
-    if (_ad_m & (async_mask_t)(1 << (n)))                         \
+    if (_ad_m & _AD_SLOT_BIT(n))                                  \
     {                                                             \
         if (_ASYNC_REACHED(_ad_now, _AD_TARGET(n)))               \
             _async_delay_expire_slot((unsigned char)(n),          \
-                                     (async_mask_t) ~(1 << (n))); \
+                                     _AD_SLOT_CLR(n));            \
     }
 
 // Slots above MAX_SLOTS expand to nothing, so the sweep below is one macro
@@ -1776,7 +1835,11 @@ static _async_slot_t _async_slots[ASYNC_DELAY_MAX_SLOTS];
         _async_pending_mask = 0;
         _ASYNC_REST_SREG();
 #if !ASYNC_DELAY_FIX_ATOMIC_MASK
+#if defined(__GNUC__) || defined(__clang__)
+        sei();
+#else
 #asm("sei") // no SREG copy to restore: fall back to enabling
+#endif
 #endif
 
         if (p == 0)
@@ -1807,7 +1870,7 @@ static _async_slot_t _async_slots[ASYNC_DELAY_MAX_SLOTS];
     // Supports 1, 2, 4, 8, 16 MHz clock frequencies.
     // ========================================================================
 
-#if defined(__AVR__) || defined(_MEGA8_) || defined(_MEGA16_) || defined(_MEGA32_) || defined(__AVR_ATmega8__) || defined(__AVR_ATmega16__) || defined(__AVR_ATmega32__)
+#if defined(__AVR__) || defined(_MEGA8_) || defined(_MEGA16_) || defined(_MEGA32_) || defined(__AVR_ATmega8__) || defined(__AVR_ATmega16__) || defined(__AVR_ATmega32__) || defined(ASYNC_DELAY_TEST_HARDWARE_MACROS)
 
     // Timer 1 (16-bit CTC Mode - Recommended for best precision & zero jitter)
     // In ISR, call async_delay_tick().
@@ -1857,16 +1920,37 @@ static _async_slot_t _async_slots[ASYNC_DELAY_MAX_SLOTS];
     //   CodeVisionAVR : interrupt [TIM2_COMP] void timer2_comp_isr(void) { async_delay_tick(); }
     //   AVR-GCC       : ISR(TIMER2_COMP_vect) { async_delay_tick(); }
 #define ASYNC_DELAY_SETUP_TIMER2_CTC_16MHZ_1KHZ() do { \
-        TCCR2 = 0x0B; /* CTC mode (WGM21=1), Prescaler /64 */ \
+        TCCR2 = 0x0C; /* CTC mode (WGM21=1), Prescaler /64 (CS22=1) */ \
         TCNT2 = 0x00; \
         OCR2  = 249;  /* 16MHz / (64 * 1000Hz) - 1 = 249 */ \
         TIMSK |= 0x80; /* Enable OCIE2 */ \
     } while (0)
 
 #define ASYNC_DELAY_SETUP_TIMER2_CTC_8MHZ_1KHZ() do { \
-        TCCR2 = 0x0B; /* CTC mode (WGM21=1), Prescaler /64 */ \
+        TCCR2 = 0x0C; /* CTC mode (WGM21=1), Prescaler /64 (CS22=1) */ \
         TCNT2 = 0x00; \
         OCR2  = 124;  /* 8MHz / (64 * 1000Hz) - 1 = 124 */ \
+        TIMSK |= 0x80; /* Enable OCIE2 */ \
+    } while (0)
+
+#define ASYNC_DELAY_SETUP_TIMER2_CTC_4MHZ_1KHZ() do { \
+        TCCR2 = 0x0B; /* CTC mode (WGM21=1), Prescaler /32 (CS21=1, CS20=1) */ \
+        TCNT2 = 0x00; \
+        OCR2  = 124;  /* 4MHz / (32 * 1000Hz) - 1 = 124 */ \
+        TIMSK |= 0x80; /* Enable OCIE2 */ \
+    } while (0)
+
+#define ASYNC_DELAY_SETUP_TIMER2_CTC_2MHZ_1KHZ() do { \
+        TCCR2 = 0x0A; /* CTC mode (WGM21=1), Prescaler /8 (CS21=1) */ \
+        TCNT2 = 0x00; \
+        OCR2  = 249;  /* 2MHz / (8 * 1000Hz) - 1 = 249 */ \
+        TIMSK |= 0x80; /* Enable OCIE2 */ \
+    } while (0)
+
+#define ASYNC_DELAY_SETUP_TIMER2_CTC_1MHZ_1KHZ() do { \
+        TCCR2 = 0x0A; /* CTC mode (WGM21=1), Prescaler /8 (CS21=1) */ \
+        TCNT2 = 0x00; \
+        OCR2  = 124;  /* 1MHz / (8 * 1000Hz) - 1 = 124 */ \
         TIMSK |= 0x80; /* Enable OCIE2 */ \
     } while (0)
 
@@ -1884,6 +1968,61 @@ static _async_slot_t _async_slots[ASYNC_DELAY_MAX_SLOTS];
         OCR1AL = (unsigned char)(top & 0xFF);
         TCCR1B = 0x0A; /* CTC mode, /8 prescaler */
         TIMSK |= 0x10; /* Enable OCIE1A */
+    }
+
+    // Dynamic Timer 2 initialization function for custom frequencies (8-bit CTC mode)
+    static void async_delay_hw_timer2_init(unsigned long f_cpu_hz, unsigned int tick_hz)
+    {
+        unsigned long top;
+        unsigned char prescaler_bits;
+        unsigned char ocr_val;
+
+        if (tick_hz == 0)
+            tick_hz = 1000;
+
+        // Select optimal prescaler to keep OCR2 within 8-bit range (0..255)
+        top = (f_cpu_hz / (8UL * (unsigned long)tick_hz)) - 1UL;
+        if (top <= 255UL) {
+            prescaler_bits = 0x0A; // /8 prescaler (WGM21=1, CS21=1)
+            ocr_val = (unsigned char)top;
+        } else {
+            top = (f_cpu_hz / (32UL * (unsigned long)tick_hz)) - 1UL;
+            if (top <= 255UL) {
+                prescaler_bits = 0x0B; // /32 prescaler
+                ocr_val = (unsigned char)top;
+            } else {
+                top = (f_cpu_hz / (64UL * (unsigned long)tick_hz)) - 1UL;
+                if (top <= 255UL) {
+                    prescaler_bits = 0x0C; // /64 prescaler
+                    ocr_val = (unsigned char)top;
+                } else {
+                    top = (f_cpu_hz / (128UL * (unsigned long)tick_hz)) - 1UL;
+                    if (top <= 255UL) {
+                        prescaler_bits = 0x0D; // /128 prescaler
+                        ocr_val = (unsigned char)top;
+                    } else {
+                        top = (f_cpu_hz / (256UL * (unsigned long)tick_hz)) - 1UL;
+                        if (top <= 255UL) {
+                            prescaler_bits = 0x0E; // /256 prescaler
+                            ocr_val = (unsigned char)top;
+                        } else {
+                            top = (f_cpu_hz / (1024UL * (unsigned long)tick_hz)) - 1UL;
+                            prescaler_bits = 0x0F; // /1024 prescaler
+                            if (top > 255UL) {
+                                ocr_val = 255;
+                            } else {
+                                ocr_val = (unsigned char)top;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        TCNT2 = 0x00;
+        OCR2  = ocr_val;
+        TCCR2 = prescaler_bits; /* CTC mode + prescaler */
+        TIMSK |= 0x80;         /* Enable OCIE2 */
     }
 
 #endif /* AVR target */

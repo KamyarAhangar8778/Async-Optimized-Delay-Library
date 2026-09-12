@@ -1,15 +1,15 @@
-# ARCHITECTURE.md — async_delay (Engineered for AI Coding Agents)
+# ARCHITECTURE.md: async_delay Architecture & Design
 
-Read this document FIRST before touching any file in this repository. It is written specifically for an AI Coding Agent (not human end-users) to instantly reconstruct the exact architectural invariants, execution constraints, memory models, hardware bottlenecks, and historical defect mitigations without needing to parse the entire codebase from scratch.
+This document details the architectural invariants, execution constraints, memory models, hardware considerations, and defect mitigations for `async_delay.h`.
 
 ---
 
 ## 1. System Identity & Mission
 
 - **Target Architecture**: 8-bit Microchip/Atmel AVR (`ATmega8`, `ATmega16`, `ATmega32`, `ATmega328P`) clocked at 1–16 MHz.
-- **Compiler Targets**: **CodeVisionAVR (Primary)**, **AVR-GCC / Clang (Embedded)**, and **Host Native GCC/Clang** (Linux/x86_64 for automated test harnesses).
-- **Core Paradigm**: Single header-only (`async_delay.h`), zero-heap, zero-malloc, static RAM, non-blocking asynchronous event loop driven by a hardware timer ISR (`async_delay_tick()`).
-- **Highest Priority Objective**: **Absolute Maximum Execution Speed (Minimal CPU Cycles)** while preserving rock-solid safety against timer wrap-around, ISR concurrency races, and memory corruption.
+- **Compiler Targets**: **CodeVisionAVR**, **AVR-GCC / Clang**, and **Host Native GCC/Clang** (Linux/x86_64 for automated test harnesses).
+- **Core Paradigm**: Header-only (`async_delay.h`), zero-heap, zero-malloc, static RAM, non-blocking asynchronous event loop driven by a hardware timer ISR (`async_delay_tick()`).
+- **Objective**: Minimal CPU cycle execution while maintaining safety against timer wrap-around, ISR concurrency races, and memory corruption.
 
 ---
 
@@ -17,7 +17,7 @@ Read this document FIRST before touching any file in this repository. It is writ
 
 | Path | Primary Agent Role / Purpose |
 |---|---|
-| `async_delay.h` | **The Core Library**. Defines `ASYNC_DELAY_VERSION 1`. Contains all algorithms, ISR gates, data structures, and conditional compilation flags. |
+| `async_delay.h` | **The Core Library**. Defines `ASYNC_DELAY_VERSION 5`. Contains all algorithms, ISR gates, data structures, and conditional compilation flags. |
 | `ARCHITECTURE.md` | **Your Internal Blueprint (This file)**. Hardware models, cycle budgets, regression rules, and internal invariants. |
 | `README.md` | Public integration contract, hardware timer formulas, and complete API specifications. |
 | `async_delay_guide.md` | Persian technical guide for embedded developers using CodeVisionAVR. |
@@ -49,7 +49,7 @@ AVR data bus is 8-bit. Reading a 16-bit (`unsigned int`) or 32-bit (`unsigned lo
 
 ---
 
-## 4. Current State & Micro-Benchmarked Performance (v11)
+## 4. Current State & Micro-Benchmarked Performance (v5)
 
 Measured on ATmega8 @ 8 MHz (`TIMER_BITS=16`, `MAX_SLOTS=4`, `TICK_HZ=1000`):
 

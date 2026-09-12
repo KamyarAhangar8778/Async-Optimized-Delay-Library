@@ -29,223 +29,258 @@ _async_recompute_next:
 	movzbl	_async_active_mask(%rip), %eax
 	testb	%al, %al
 	je	.L3
-	movl	%eax, %ecx
-	movl	%eax, %edi
-	movl	%eax, %esi
-	andl	$2, %ecx
-	andl	$8, %edi
-	andl	$4, %esi
 	testb	$1, %al
-	je	.L113
-	movl	_async_slots(%rip), %edx
-	testb	%cl, %cl
-	jne	.L114
-	testb	%sil, %sil
-	jne	.L10
-	testb	%dil, %dil
-	jne	.L77
-	testb	$16, %al
-	jne	.L22
-	testb	$32, %al
-	jne	.L80
-	movl	%eax, %edi
-	andb	$64, %dil
-	je	.L70
-	.p2align 4,,10
-	.p2align 3
-.L79:
-	movl	%edx, %ecx
-	jmp	.L36
+	je	.L5
+	movl	%eax, %edx
+	movl	_async_slots(%rip), %esi
+	andl	$254, %edx
+	je	.L111
+	testb	$2, %al
+	jne	.L119
+	testb	$4, %al
+	je	.L120
+	movl	%esi, %ecx
+.L12:
+	movl	48+_async_slots(%rip), %edi
+	movl	%ecx, %eax
+	subl	%edi, %eax
+	cmpl	$32766, %eax
+	cmova	%ecx, %edi
+	jmp	.L17
 	.p2align 4,,10
 	.p2align 3
 .L3:
 	ret
 	.p2align 4,,10
 	.p2align 3
-.L113:
-	movl	24+_async_slots(%rip), %edx
-	testb	%cl, %cl
-	jne	.L9
-	movl	48+_async_slots(%rip), %ecx
-	testb	%sil, %sil
-	jne	.L15
-	testb	%dil, %dil
-	je	.L48
-	movl	72+_async_slots(%rip), %edx
-.L49:
-	testb	$16, %al
-	je	.L92
-.L22:
-	movl	96+_async_slots(%rip), %esi
-	movl	%edx, %ecx
-	subl	%esi, %ecx
-	cmpl	$32766, %ecx
-	jbe	.L27
-.L92:
-	testb	$32, %al
-	jne	.L80
-.L33:
-	testb	$64, %al
-	jne	.L79
-.L111:
-	testb	%al, %al
-	jns	.L38
-.L104:
-	movl	168+_async_slots(%rip), %ecx
-.L37:
-	movl	%edx, %eax
-	subl	%ecx, %eax
-	cmpl	$32766, %eax
-	cmovbe	%ecx, %edx
-	movl	%edx, _async_next_target(%rip)
-	ret
-	.p2align 4,,10
-	.p2align 3
-.L114:
+.L5:
 	movl	24+_async_slots(%rip), %ecx
-	movl	%edx, %r8d
-	subl	%ecx, %r8d
-	cmpl	$32766, %r8d
-	ja	.L9
-	movl	%ecx, %edx
-.L9:
-	testb	%sil, %sil
+	testb	$2, %al
 	jne	.L10
-	testb	%dil, %dil
-	jne	.L77
-	movl	%edx, %esi
-	testb	$16, %al
-	jne	.L22
-	testb	$32, %al
-	je	.L115
-.L30:
-	movl	120+_async_slots(%rip), %ecx
-	movl	%esi, %edx
+	testb	$4, %al
+	je	.L15
+	movl	48+_async_slots(%rip), %edi
+	movl	%eax, %edx
+.L17:
+	movl	%edx, %eax
+	andl	$251, %eax
+	je	.L112
+	testb	$8, %dl
+	jne	.L19
+	testb	$16, %dl
+	jne	.L65
+	testb	$32, %dl
+	jne	.L121
+	andl	$64, %edx
+	je	.L100
+.L38:
+	movl	144+_async_slots(%rip), %ecx
+	movl	%edi, %edx
 	subl	%ecx, %edx
 	cmpl	$32766, %edx
-	jbe	.L98
-	testb	$64, %al
-	jne	.L67
+	cmova	%edi, %ecx
+.L44:
+	andb	$-65, %al
+	je	.L47
 .L118:
-	movl	%esi, %edx
-	testb	%al, %al
-	js	.L104
-.L38:
-	movl	%edx, _async_next_target(%rip)
+	jns	.L47
+.L109:
+	movl	168+_async_slots(%rip), %edi
+.L46:
+	movl	%ecx, %eax
+	subl	%edi, %eax
+	cmpl	$32766, %eax
+	cmovbe	%edi, %ecx
+.L47:
+	movl	%ecx, _async_next_target(%rip)
 	ret
 	.p2align 4,,10
 	.p2align 3
+.L119:
+	movl	24+_async_slots(%rip), %ecx
+	movl	%esi, %edi
+	movl	%edx, %eax
+	subl	%ecx, %edi
+	cmpl	$32766, %edi
+	cmova	%esi, %ecx
 .L10:
-	movl	48+_async_slots(%rip), %ecx
-	movl	%edx, %esi
-	subl	%ecx, %esi
-	cmpl	$32766, %esi
-	jbe	.L15
-	testb	%dil, %dil
-	je	.L116
-.L77:
-	movl	%edx, %ecx
-.L17:
-	movl	72+_async_slots(%rip), %edx
-	movl	%ecx, %esi
-	subl	%edx, %esi
-	cmpl	$32766, %esi
-	jbe	.L49
+	movl	%eax, %edx
+	andl	$253, %edx
+	je	.L47
+	testb	$4, %al
+	jne	.L12
+	testb	$8, %al
+	jne	.L122
 	testb	$16, %al
-	je	.L117
-.L59:
-	movl	%ecx, %edx
-	jmp	.L22
+	jne	.L123
+	testb	$32, %al
+	je	.L35
+	movl	%edx, %esi
+.L32:
+	movl	120+_async_slots(%rip), %edi
+	movl	%ecx, %eax
+	subl	%edi, %eax
+	cmpl	$32766, %eax
+	cmova	%ecx, %edi
+.L36:
+	movl	%esi, %eax
+	andl	$223, %eax
+	je	.L112
+	andl	$64, %esi
+	jne	.L38
+.L100:
+	movl	%edi, %ecx
+	testb	%al, %al
+	jmp	.L118
 	.p2align 4,,10
 	.p2align 3
-.L80:
-	movl	%edx, %esi
-	jmp	.L30
+.L111:
+	movl	%esi, _async_next_target(%rip)
+	ret
+	.p2align 4,,10
+	.p2align 3
+.L112:
+	movl	%edi, _async_next_target(%rip)
+	ret
+	.p2align 4,,10
+	.p2align 3
+.L122:
+	movl	%ecx, %edi
+	movl	%edx, %eax
+.L19:
+	movl	72+_async_slots(%rip), %esi
+	movl	%edi, %edx
+	subl	%esi, %edx
+	cmpl	$32766, %edx
+	cmova	%edi, %esi
+.L22:
+	movl	%eax, %edx
+	andl	$247, %edx
+	je	.L111
+	testb	$16, %al
+	jne	.L24
+	testb	$32, %al
+	jne	.L82
+	testb	$64, %al
+	jne	.L76
+	movl	%esi, %ecx
+	testb	%dl, %dl
+	jmp	.L118
 	.p2align 4,,10
 	.p2align 3
 .L15:
-	testb	%dil, %dil
-	jne	.L17
-	testb	$16, %al
-	jne	.L59
-.L25:
-	testb	$32, %al
-	jne	.L75
-.L98:
-	testb	$64, %al
-	je	.L96
-.L36:
-	movl	144+_async_slots(%rip), %edx
-	movl	%ecx, %esi
-	subl	%edx, %esi
-	cmpl	$32766, %esi
-	jbe	.L111
-.L96:
-	movl	%ecx, %edx
-	jmp	.L111
-.L48:
-	testb	$16, %al
-	je	.L26
-	movl	96+_async_slots(%rip), %esi
+	testb	$8, %al
+	je	.L54
+	movl	72+_async_slots(%rip), %esi
+	jmp	.L22
 	.p2align 4,,10
 	.p2align 3
+.L120:
+	testb	$8, %al
+	jne	.L124
+	testb	$16, %al
+	je	.L125
+.L24:
+	movl	96+_async_slots(%rip), %ecx
+	movl	%esi, %eax
+	subl	%ecx, %eax
+	cmpl	$32766, %eax
+	cmova	%esi, %ecx
+.L30:
+	movl	%edx, %esi
+	andl	$239, %esi
+	je	.L47
+	testb	$32, %dl
+	jne	.L32
+	andl	$64, %edx
+	je	.L126
+	movl	%ecx, %edi
+	movl	%esi, %eax
+	jmp	.L38
+	.p2align 4,,10
+	.p2align 3
+.L65:
+	movl	%edi, %esi
+	movl	%eax, %edx
+	jmp	.L24
+	.p2align 4,,10
+	.p2align 3
+.L82:
+	movl	%esi, %ecx
+	movl	%edx, %esi
+	jmp	.L32
+	.p2align 4,,10
+	.p2align 3
+.L126:
+	testb	%sil, %sil
+	jmp	.L118
+	.p2align 4,,10
+	.p2align 3
+.L125:
+	testb	$32, %al
+	jne	.L82
+	andl	$64, %eax
+	je	.L42
+.L76:
+	movl	%esi, %edi
+	movl	%edx, %eax
+	jmp	.L38
+.L35:
+	testb	$64, %al
+	jne	.L127
+	testb	%dl, %dl
+	js	.L109
+	jmp	.L47
+	.p2align 4,,10
+	.p2align 3
+.L54:
+	testb	$16, %al
+	je	.L27
+	movl	96+_async_slots(%rip), %ecx
+	movl	%eax, %edx
+	jmp	.L30
+.L124:
+	movl	%esi, %edi
+	movl	%edx, %eax
+	jmp	.L19
 .L27:
 	testb	$32, %al
-	jne	.L30
-	testb	$64, %al
-	je	.L118
-.L67:
-	movl	%esi, %ecx
+	je	.L128
+	movl	120+_async_slots(%rip), %edi
+	movl	%eax, %esi
 	jmp	.L36
-	.p2align 4,,10
-	.p2align 3
-.L117:
-	movl	%ecx, %edx
-	testb	$32, %al
-	je	.L33
-.L75:
+.L123:
 	movl	%ecx, %esi
-	jmp	.L30
-	.p2align 4,,10
-	.p2align 3
-.L116:
-	movl	%edx, %ecx
-	testb	$16, %al
-	je	.L25
-	jmp	.L22
-.L115:
+	jmp	.L24
+.L121:
+	movl	%edi, %ecx
+	movl	%eax, %esi
+	jmp	.L32
+.L128:
 	testb	$64, %al
-	jne	.L79
-	movl	168+_async_slots(%rip), %ecx
-	testb	%al, %al
-	js	.L37
+	je	.L70
+	movl	144+_async_slots(%rip), %ecx
+	jmp	.L44
+.L127:
+	movl	%ecx, %edi
+	movl	%edx, %eax
 	jmp	.L38
 .L70:
-	movl	%edx, %esi
-.L40:
-	testb	%al, %al
-	jns	.L73
-	movl	168+_async_slots(%rip), %ecx
-	movl	%ecx, %edx
-	testb	%dil, %dil
-	jne	.L38
-	movl	%esi, %edx
-	jmp	.L37
-.L26:
-	movl	120+_async_slots(%rip), %ecx
-	testb	$32, %al
-	jne	.L98
-	testb	$64, %al
-	je	.L69
-	movl	144+_async_slots(%rip), %edx
-	jmp	.L111
-.L73:
-	movl	%esi, %edx
-	jmp	.L38
-.L69:
+	movl	%eax, %edx
 	xorl	%esi, %esi
-	movl	$1, %edi
-	jmp	.L40
+	movl	$1, %eax
+.L42:
+	testb	%dl, %dl
+	jns	.L74
+	movl	168+_async_slots(%rip), %edi
+	movl	%edi, %ecx
+	testb	%al, %al
+	jne	.L47
+	movl	%esi, %ecx
+	jmp	.L46
+.L74:
+	movl	%esi, %ecx
+	jmp	.L47
 	.cfi_endproc
 .LFE52:
 	.size	_async_recompute_next, .-_async_recompute_next
@@ -254,46 +289,49 @@ _async_recompute_next:
 _async_delay_start_common:
 .LFB53:
 	.cfi_startproc
-	movl	%edx, %r10d
-	movzbl	_async_used_mask(%rip), %edx
-	movq	%rsi, %r9
 	movl	%edi, %ecx
+	movq	%rsi, %r10
+	movl	%edx, %r9d
+	movl	$-1, %eax
+	cmpl	$32768, %edi
+	je	.L129
+	movzbl	_async_used_mask(%rip), %edx
 	leaq	_async_first_free_nibble(%rip), %rsi
 	movq	%rdx, %rax
 	andl	$15, %eax
 	movzbl	(%rsi,%rax), %eax
 	cmpb	$4, %al
-	jne	.L120
+	jne	.L131
 	shrb	$4, %dl
 	andl	$15, %edx
 	movzbl	(%rsi,%rdx), %eax
 	addl	$4, %eax
-.L120:
-	movzbl	%al, %edx
+.L131:
 	cmpb	$7, %al
-	ja	.L125
+	ja	.L136
+	movzbl	%al, %edx
 	leaq	_async_slot_bit(%rip), %rsi
 	movzbl	SREG(%rip), %r11d
-	leaq	(%rdx,%rdx,2), %r8
 	movzbl	(%rsi,%rdx), %edi
 	movl	_async_tick_counter(%rip), %esi
+	leaq	(%rdx,%rdx,2), %r8
 	leaq	_async_slots(%rip), %rdx
 	leaq	(%rdx,%r8,8), %r8
 	addl	%ecx, %esi
-	cmpb	$1, %r10b
+	cmpb	$1, %r9b
 	movl	%ecx, 4(%r8)
 	movzbl	_async_active_mask(%rip), %ecx
 	sbbl	%edx, %edx
 	movl	%esi, (%r8)
 	andl	$-4, %edx
-	movq	%r9, 8(%r8)
+	movq	%r10, 8(%r8)
 	addl	$5, %edx
 	movb	%dl, 16(%r8)
 	testb	%cl, %cl
-	jne	.L130
-.L123:
+	jne	.L142
+.L133:
 	movl	%esi, _async_next_target(%rip)
-.L124:
+.L134:
 	movzbl	_async_used_mask(%rip), %edx
 	orl	%edi, %edx
 	orl	%ecx, %edi
@@ -303,17 +341,18 @@ _async_delay_start_common:
 	ret
 	.p2align 4,,10
 	.p2align 3
-.L130:
+.L136:
+	movl	$-1, %eax
+.L129:
+	ret
+	.p2align 4,,10
+	.p2align 3
+.L142:
 	movl	_async_next_target(%rip), %edx
 	subl	%esi, %edx
 	cmpl	$32766, %edx
-	ja	.L124
-	jmp	.L123
-	.p2align 4,,10
-	.p2align 3
-.L125:
-	movl	$-1, %eax
-	ret
+	ja	.L134
+	jmp	.L133
 	.cfi_endproc
 .LFE53:
 	.size	_async_delay_start_common, .-_async_delay_start_common
@@ -322,25 +361,49 @@ _async_delay_start_common:
 async_delay_ticks_until_next:
 .LFB62:
 	.cfi_startproc
+	movzbl	SREG(%rip), %edx
 	movzbl	_async_active_mask(%rip), %eax
 	testb	%al, %al
-	je	.L134
-	movzbl	SREG(%rip), %ecx
-	movl	_async_tick_counter(%rip), %edx
+	je	.L148
+	movl	_async_tick_counter(%rip), %ecx
 	movl	_async_next_target(%rip), %eax
-	movb	%cl, SREG(%rip)
-	movl	%edx, %ecx
-	subl	%eax, %ecx
-	cmpl	$32766, %ecx
-	jbe	.L134
-	subl	%edx, %eax
+	movb	%dl, SREG(%rip)
+	movl	%ecx, %edx
+	subl	%eax, %edx
+	subl	%ecx, %eax
+	cmpl	$32766, %edx
+	jbe	.L145
 	ret
-.L134:
+.L148:
+	movb	%dl, SREG(%rip)
+.L145:
 	xorl	%eax, %eax
 	ret
 	.cfi_endproc
 .LFE62:
 	.size	async_delay_ticks_until_next, .-async_delay_ticks_until_next
+	.p2align 4
+	.type	async_delay_cancel_all, @function
+async_delay_cancel_all:
+.LFB63:
+	.cfi_startproc
+	movzbl	SREG(%rip), %eax
+	movb	$0, 16+_async_slots(%rip)
+	movb	$0, _async_active_mask(%rip)
+	movb	$0, 40+_async_slots(%rip)
+	movb	$0, _async_used_mask(%rip)
+	movb	$0, 64+_async_slots(%rip)
+	movl	$0, _async_next_target(%rip)
+	movb	$0, 88+_async_slots(%rip)
+	movb	$0, 112+_async_slots(%rip)
+	movb	$0, 136+_async_slots(%rip)
+	movb	$0, 160+_async_slots(%rip)
+	movb	$0, 184+_async_slots(%rip)
+	movb	%al, SREG(%rip)
+	ret
+	.cfi_endproc
+.LFE63:
+	.size	async_delay_cancel_all, .-async_delay_cancel_all
 	.p2align 4
 	.type	_async_delay_expire_slot, @function
 _async_delay_expire_slot:
@@ -353,18 +416,18 @@ _async_delay_expire_slot:
 	leaq	(%rcx,%rax,8), %rax
 	movq	8(%rax), %rdx
 	testb	$4, 16(%rax)
-	je	.L136
+	je	.L151
 	testq	%rdx, %rdx
-	je	.L137
+	je	.L152
 	movl	4(%rax), %ecx
 	movl	%r8d, %edi
 	addl	%ecx, (%rax)
 	jmp	*%rdx
 	.p2align 4,,10
 	.p2align 3
-.L136:
+.L151:
 	testq	%rdx, %rdx
-	je	.L137
+	je	.L152
 	movzbl	_async_active_mask(%rip), %ecx
 	movb	$0, 16(%rax)
 	movl	%r8d, %edi
@@ -377,7 +440,7 @@ _async_delay_expire_slot:
 	jmp	*%rdx
 	.p2align 4,,10
 	.p2align 3
-.L137:
+.L152:
 	movzbl	_async_active_mask(%rip), %eax
 	andl	%esi, %eax
 	movb	%al, _async_active_mask(%rip)
@@ -403,57 +466,57 @@ _async_delay_tick_walk:
 	movl	_async_tick_counter(%rip), %ebp
 	movzbl	_async_active_mask(%rip), %ebx
 	testb	$1, %bl
-	je	.L145
+	je	.L160
 	movl	%ebp, %eax
 	subl	_async_slots(%rip), %eax
 	cmpl	$32766, %eax
-	jbe	.L175
-.L145:
+	jbe	.L190
+.L160:
 	testb	$2, %bl
-	je	.L146
+	je	.L161
 	movl	%ebp, %eax
 	subl	24+_async_slots(%rip), %eax
 	cmpl	$32766, %eax
-	jbe	.L176
-.L146:
+	jbe	.L191
+.L161:
 	testb	$4, %bl
-	je	.L147
+	je	.L162
 	movl	%ebp, %eax
 	subl	48+_async_slots(%rip), %eax
 	cmpl	$32766, %eax
-	jbe	.L177
-.L147:
+	jbe	.L192
+.L162:
 	testb	$8, %bl
-	je	.L148
+	je	.L163
 	movl	%ebp, %eax
 	subl	72+_async_slots(%rip), %eax
 	cmpl	$32766, %eax
-	jbe	.L178
-.L148:
+	jbe	.L193
+.L163:
 	testb	$16, %bl
-	je	.L149
+	je	.L164
 	movl	%ebp, %eax
 	subl	96+_async_slots(%rip), %eax
 	cmpl	$32766, %eax
-	jbe	.L179
-.L149:
+	jbe	.L194
+.L164:
 	testb	$32, %bl
-	je	.L150
+	je	.L165
 	movl	%ebp, %eax
 	subl	120+_async_slots(%rip), %eax
 	cmpl	$32766, %eax
-	jbe	.L180
-.L150:
+	jbe	.L195
+.L165:
 	testb	$64, %bl
-	je	.L151
+	je	.L166
 	movl	%ebp, %eax
 	subl	144+_async_slots(%rip), %eax
 	cmpl	$32766, %eax
-	jbe	.L181
-.L151:
+	jbe	.L196
+.L166:
 	testb	%bl, %bl
-	js	.L182
-.L152:
+	js	.L197
+.L167:
 	addq	$8, %rsp
 	.cfi_remember_state
 	.cfi_def_cfa_offset 24
@@ -464,11 +527,11 @@ _async_delay_tick_walk:
 	jmp	_async_recompute_next
 	.p2align 4,,10
 	.p2align 3
-.L182:
+.L197:
 	.cfi_restore_state
 	subl	168+_async_slots(%rip), %ebp
 	cmpl	$32766, %ebp
-	ja	.L152
+	ja	.L167
 	movl	$127, %esi
 	movl	$7, %edi
 	call	_async_delay_expire_slot
@@ -482,61 +545,61 @@ _async_delay_tick_walk:
 	jmp	_async_recompute_next
 	.p2align 4,,10
 	.p2align 3
-.L181:
+.L196:
 	.cfi_restore_state
 	movl	$191, %esi
 	movl	$6, %edi
 	call	_async_delay_expire_slot
-	jmp	.L151
+	jmp	.L166
 	.p2align 4,,10
 	.p2align 3
-.L175:
+.L190:
 	movl	$254, %esi
 	xorl	%edi, %edi
 	call	_async_delay_expire_slot
-	jmp	.L145
+	jmp	.L160
 	.p2align 4,,10
 	.p2align 3
-.L176:
+.L191:
 	movl	$253, %esi
 	movl	$1, %edi
 	call	_async_delay_expire_slot
-	jmp	.L146
+	jmp	.L161
 	.p2align 4,,10
 	.p2align 3
-.L177:
+.L192:
 	movl	$251, %esi
 	movl	$2, %edi
 	call	_async_delay_expire_slot
-	jmp	.L147
+	jmp	.L162
 	.p2align 4,,10
 	.p2align 3
-.L178:
+.L193:
 	movl	$247, %esi
 	movl	$3, %edi
 	call	_async_delay_expire_slot
-	jmp	.L148
+	jmp	.L163
 	.p2align 4,,10
 	.p2align 3
-.L179:
+.L194:
 	movl	$239, %esi
 	movl	$4, %edi
 	call	_async_delay_expire_slot
-	jmp	.L149
+	jmp	.L164
 	.p2align 4,,10
 	.p2align 3
-.L180:
+.L195:
 	movl	$223, %esi
 	movl	$5, %edi
 	call	_async_delay_expire_slot
-	jmp	.L150
+	jmp	.L165
 	.cfi_endproc
 .LFE65:
 	.size	_async_delay_tick_walk, .-_async_delay_tick_walk
 	.p2align 4
 	.type	test_cb_oneshot, @function
 test_cb_oneshot:
-.LFB67:
+.LFB69:
 	.cfi_startproc
 	endbr64
 	movl	cb_count1(%rip), %eax
@@ -545,12 +608,12 @@ test_cb_oneshot:
 	movb	%dil, last_cb_slot(%rip)
 	ret
 	.cfi_endproc
-.LFE67:
+.LFE69:
 	.size	test_cb_oneshot, .-test_cb_oneshot
 	.p2align 4
 	.type	test_cb_periodic, @function
 test_cb_periodic:
-.LFB68:
+.LFB70:
 	.cfi_startproc
 	endbr64
 	movl	cb_count2(%rip), %eax
@@ -558,31 +621,83 @@ test_cb_periodic:
 	movl	%eax, cb_count2(%rip)
 	ret
 	.cfi_endproc
-.LFE68:
+.LFE70:
 	.size	test_cb_periodic, .-test_cb_periodic
+	.p2align 4
+	.type	async_delay_restart, @function
+async_delay_restart:
+.LFB56:
+	.cfi_startproc
+	cmpb	$7, %dil
+	ja	.L205
+	cmpl	$32767, %esi
+	ja	.L205
+	leaq	_async_slot_bit(%rip), %rax
+	movzbl	%dil, %edi
+	movzbl	(%rax,%rdi), %edx
+	movzbl	_async_used_mask(%rip), %eax
+	andb	%dl, %al
+	je	.L200
+	imulq	$24, %rdi, %rdi
+	leaq	_async_slots(%rip), %rax
+	movzbl	SREG(%rip), %r9d
+	movl	_async_tick_counter(%rip), %r8d
+	addl	%esi, %r8d
+	addq	%rdi, %rax
+	movzbl	16(%rax), %ecx
+	movl	%esi, 4(%rax)
+	movl	%r8d, (%rax)
+	andl	$4, %ecx
+	cmpb	$1, %cl
+	sbbl	%ecx, %ecx
+	andl	$-4, %ecx
+	addl	$5, %ecx
+	movb	%cl, 16(%rax)
+	movzbl	_async_active_mask(%rip), %eax
+	testb	%al, %al
+	je	.L203
+	movl	_async_next_target(%rip), %ecx
+	subl	%r8d, %ecx
+	cmpl	$32766, %ecx
+	ja	.L204
+.L203:
+	movl	%r8d, _async_next_target(%rip)
+.L204:
+	orl	%eax, %edx
+	movl	$1, %eax
+	movb	%dl, _async_active_mask(%rip)
+	movb	%r9b, SREG(%rip)
+	ret
+.L205:
+	xorl	%eax, %eax
+.L200:
+	ret
+	.cfi_endproc
+.LFE56:
+	.size	async_delay_restart, .-async_delay_restart
 	.p2align 4
 	.type	async_delay_elapsed.part.0, @function
 async_delay_elapsed.part.0:
-.LFB81:
+.LFB86:
 	.cfi_startproc
 	leaq	_async_slot_bit(%rip), %rax
 	movzbl	%dil, %edi
 	movzbl	(%rax,%rdi), %edx
 	movzbl	_async_active_mask(%rip), %eax
 	andb	%dl, %al
-	jne	.L187
+	jne	.L215
 	imulq	$24, %rdi, %rdi
 	leaq	_async_slots(%rip), %rcx
 	addq	%rdi, %rcx
 	movzbl	16(%rcx), %esi
 	andl	$3, %esi
 	cmpb	$2, %sil
-	je	.L188
+	je	.L216
 	ret
-.L187:
+.L215:
 	xorl	%eax, %eax
 	ret
-.L188:
+.L216:
 	movzbl	SREG(%rip), %eax
 	movzbl	_async_used_mask(%rip), %esi
 	notl	%edx
@@ -593,17 +708,17 @@ async_delay_elapsed.part.0:
 	movl	$1, %eax
 	ret
 	.cfi_endproc
-.LFE81:
+.LFE86:
 	.size	async_delay_elapsed.part.0, .-async_delay_elapsed.part.0
 	.p2align 4
 	.type	async_delay_cancel.part.0, @function
 async_delay_cancel.part.0:
-.LFB82:
+.LFB87:
 	.cfi_startproc
 	movzbl	%dil, %edi
 	leaq	_async_slot_bit(%rip), %rax
 	leaq	_async_slots(%rip), %rdx
-	movzbl	SREG(%rip), %r9d
+	movzbl	SREG(%rip), %r8d
 	movzbl	(%rax,%rdi), %ecx
 	leaq	(%rdi,%rdi,2), %rsi
 	movzbl	_async_active_mask(%rip), %edi
@@ -611,7 +726,7 @@ async_delay_cancel.part.0:
 	movzbl	_async_active_mask(%rip), %edx
 	movl	%ecx, %eax
 	movb	$0, 16(%rsi)
-	movl	(%rsi), %r8d
+	movl	(%rsi), %r9d
 	notl	%eax
 	andl	%eax, %edx
 	movb	%dl, _async_active_mask(%rip)
@@ -619,28 +734,26 @@ async_delay_cancel.part.0:
 	andl	%edx, %eax
 	movb	%al, _async_used_mask(%rip)
 	testb	%dil, %cl
-	je	.L190
+	je	.L218
 	movl	_async_next_target(%rip), %eax
-	cmpl	%eax, %r8d
-	je	.L197
-.L190:
-	movb	%r9b, SREG(%rip)
+	cmpl	%eax, %r9d
+	je	.L225
+.L218:
+	movb	%r8b, SREG(%rip)
 	ret
-	.p2align 4,,10
-	.p2align 3
-.L197:
+.L225:
 	movzbl	_async_active_mask(%rip), %eax
 	testb	%al, %al
-	je	.L190
+	je	.L218
 	call	_async_recompute_next
-	jmp	.L190
+	jmp	.L218
 	.cfi_endproc
-.LFE82:
+.LFE87:
 	.size	async_delay_cancel.part.0, .-async_delay_cancel.part.0
 	.p2align 4
 	.type	async_delay_is_active.part.0, @function
 async_delay_is_active.part.0:
-.LFB83:
+.LFB88:
 	.cfi_startproc
 	movzbl	%dil, %edi
 	leaq	_async_slot_bit(%rip), %rdx
@@ -649,7 +762,7 @@ async_delay_is_active.part.0:
 	setne	%al
 	ret
 	.cfi_endproc
-.LFE83:
+.LFE88:
 	.size	async_delay_is_active.part.0, .-async_delay_is_active.part.0
 	.p2align 4
 	.type	async_delay_remaining, @function
@@ -657,12 +770,12 @@ async_delay_remaining:
 .LFB61:
 	.cfi_startproc
 	cmpb	$7, %dil
-	ja	.L202
+	ja	.L230
 	movzbl	%dil, %ecx
 	movl	%ecx, %edi
 	call	async_delay_is_active.part.0
 	testb	%al, %al
-	je	.L202
+	je	.L230
 	movslq	%ecx, %rdi
 	movzbl	SREG(%rip), %esi
 	leaq	_async_slots(%rip), %rax
@@ -673,70 +786,17 @@ async_delay_remaining:
 	movl	(%rax,%rdi), %eax
 	subl	%eax, %ecx
 	cmpl	$32766, %ecx
-	jbe	.L202
+	jbe	.L230
 	subl	%edx, %eax
 	ret
 	.p2align 4,,10
 	.p2align 3
-.L202:
+.L230:
 	xorl	%eax, %eax
 	ret
 	.cfi_endproc
 .LFE61:
 	.size	async_delay_remaining, .-async_delay_remaining
-	.p2align 4
-	.type	async_delay_cancel_all, @function
-async_delay_cancel_all:
-.LFB63:
-	.cfi_startproc
-	leaq	_async_slots(%rip), %r9
-	pushq	%rbx
-	.cfi_def_cfa_offset 16
-	.cfi_offset 3, -16
-	leaq	_async_slot_bit(%rip), %r10
-	leaq	192(%r9), %rbx
-	jmp	.L208
-	.p2align 4,,10
-	.p2align 3
-.L207:
-	addq	$24, %r9
-	movb	%r11b, SREG(%rip)
-	addq	$1, %r10
-	cmpq	%rbx, %r9
-	je	.L217
-.L208:
-	movzbl	(%r10), %ecx
-	movzbl	SREG(%rip), %r11d
-	movb	$0, 16(%r9)
-	movzbl	_async_active_mask(%rip), %esi
-	movzbl	_async_active_mask(%rip), %edx
-	movl	%ecx, %eax
-	movl	(%r9), %edi
-	notl	%eax
-	andl	%eax, %edx
-	movb	%dl, _async_active_mask(%rip)
-	movzbl	_async_used_mask(%rip), %edx
-	andl	%edx, %eax
-	movb	%al, _async_used_mask(%rip)
-	testb	%sil, %cl
-	je	.L207
-	movl	_async_next_target(%rip), %eax
-	cmpl	%eax, %edi
-	jne	.L207
-	movzbl	_async_active_mask(%rip), %eax
-	testb	%al, %al
-	je	.L207
-	call	_async_recompute_next
-	jmp	.L207
-	.p2align 4,,10
-	.p2align 3
-.L217:
-	popq	%rbx
-	.cfi_def_cfa_offset 8
-	ret
-	.cfi_endproc
-.LFE63:
-	.size	async_delay_cancel_all, .-async_delay_cancel_all
 	.section	.rodata.str1.8,"aMS",@progbits,1
 	.align 8
 .LC0:
@@ -956,26 +1016,93 @@ async_delay_cancel_all:
 	.section	.rodata.str1.8
 	.align 8
 .LC74:
-	.string	"\n----------------------------------------"
+	.string	"Running test_hardware_timer_setup..."
 	.align 8
 .LC75:
+	.string	"Timer2 CTC 8MHz prescaler is /64 (0x0C)"
+	.section	.rodata.str1.1
+.LC76:
+	.string	"Timer2 CTC 8MHz OCR2 is 124"
+.LC77:
+	.string	"Timer2 OCIE2 enabled"
+	.section	.rodata.str1.8
+	.align 8
+.LC78:
+	.string	"Timer2 CTC 16MHz prescaler is /64 (0x0C)"
+	.section	.rodata.str1.1
+.LC79:
+	.string	"Timer2 CTC 16MHz OCR2 is 249"
+	.section	.rodata.str1.8
+	.align 8
+.LC80:
+	.string	"Timer2 CTC 4MHz prescaler is /32 (0x0B)"
+	.section	.rodata.str1.1
+.LC81:
+	.string	"Timer2 CTC 4MHz OCR2 is 124"
+	.section	.rodata.str1.8
+	.align 8
+.LC82:
+	.string	"Timer2 CTC 2MHz prescaler is /8 (0x0A)"
+	.section	.rodata.str1.1
+.LC83:
+	.string	"Timer2 CTC 2MHz OCR2 is 249"
+	.section	.rodata.str1.8
+	.align 8
+.LC84:
+	.string	"Timer2 CTC 1MHz prescaler is /8 (0x0A)"
+	.section	.rodata.str1.1
+.LC85:
+	.string	"Timer2 CTC 1MHz OCR2 is 124"
+	.section	.rodata.str1.8
+	.align 8
+.LC86:
+	.string	"Timer1 CTC 8MHz prescaler is /8 (0x0A)"
+	.align 8
+.LC87:
+	.string	"Timer1 CTC 8MHz OCR is 999 (0x03E7)"
+	.align 8
+.LC88:
+	.string	"Timer1 hw init 16MHz/1kHz OCR is 1999 (0x07CF)"
+	.align 8
+.LC89:
+	.string	"Timer2 hw init 8MHz/1kHz prescaler is /32 (0x0B)"
+	.align 8
+.LC90:
+	.string	"Timer2 hw init 8MHz/1kHz OCR2 is 249"
+	.align 8
+.LC91:
+	.string	"Running test_duration_boundary_limits..."
+	.align 8
+.LC92:
+	.string	"start succeeds for duration == half_range"
+	.align 8
+.LC93:
+	.string	"restart fails for new_duration > half_range"
+	.align 8
+.LC94:
+	.string	"restart succeeds for valid duration"
+	.align 8
+.LC95:
+	.string	"\n----------------------------------------"
+	.align 8
+.LC96:
 	.string	"Tests Run: %d | Passed: %d | Failed: %d\n"
 	.align 8
-.LC76:
+.LC97:
 	.string	"----------------------------------------"
 	.section	.rodata.str1.1
-.LC77:
+.LC98:
 	.string	">>> ALL TESTS PASSED! <<<\n"
-.LC78:
+.LC99:
 	.string	">>> SOME TESTS FAILED! <<<\n"
-.LC79:
+.LC100:
 	.string	"elapsed returns 1 at 50 ticks"
 	.section	.text.startup,"ax",@progbits
 	.p2align 4
 	.globl	main
 	.type	main, @function
 main:
-.LFB80:
+.LFB84:
 	.cfi_startproc
 	endbr64
 	pushq	%r15
@@ -993,6 +1120,7 @@ main:
 	pushq	%rbp
 	.cfi_def_cfa_offset 48
 	.cfi_offset 6, -48
+	leaq	_async_popcount_nibble(%rip), %rbp
 	pushq	%rbx
 	.cfi_def_cfa_offset 56
 	.cfi_offset 3, -56
@@ -1014,7 +1142,6 @@ main:
 	movl	$1, %edi
 	call	__printf_chk@PLT
 	movq	%rbx, %rdi
-	leaq	_async_popcount_nibble(%rip), %rbx
 	call	puts@PLT
 	leaq	.LC3(%rip), %rdi
 	call	puts@PLT
@@ -1027,18 +1154,18 @@ main:
 	andl	$15, %edx
 	andl	$15, %ecx
 	movl	%eax, test_total(%rip)
-	movzbl	(%rbx,%rdx), %edx
-	addb	(%rbx,%rcx), %dl
-	jne	.L219
+	movzbl	0(%rbp,%rdx), %edx
+	addb	0(%rbp,%rcx), %dl
+	jne	.L235
 	addl	$1, test_passed(%rip)
-.L220:
+.L236:
 	addl	$1, %eax
 	movl	%eax, test_total(%rip)
 	call	async_delay_ticks_until_next
 	testl	%eax, %eax
-	jne	.L221
+	jne	.L237
 	addl	$1, test_passed(%rip)
-.L222:
+.L238:
 	leaq	.LC7(%rip), %rdi
 	call	puts@PLT
 	xorl	%edx, %edx
@@ -1046,175 +1173,175 @@ main:
 	movl	$50, %edi
 	call	async_delay_init
 	call	_async_delay_start_common
-	movl	%eax, %ebp
+	movl	%eax, %ebx
 	movl	test_total(%rip), %eax
 	leal	1(%rax), %edx
 	movl	%edx, test_total(%rip)
-	cmpb	$-1, %bpl
-	je	.L223
+	cmpb	$-1, %bl
+	je	.L239
 	movl	test_passed(%rip), %ecx
 	addl	$2, %eax
-	movzbl	%bpl, %r12d
+	movzbl	%bl, %r12d
 	leaq	.LC5(%rip), %rsi
 	movl	%eax, test_total(%rip)
 	leal	1(%rcx), %edx
 	movl	%edx, test_passed(%rip)
-	cmpb	$7, %bpl
-	ja	.L226
+	cmpb	$7, %bl
+	ja	.L242
 	movl	%r12d, %edi
 	leaq	.LC5(%rip), %rsi
 	call	async_delay_is_active.part.0
 	subb	$1, %al
-	je	.L495
-.L226:
+	je	.L538
+.L242:
 	leaq	.LC9(%rip), %rcx
-	movl	$90, %edx
+	movl	$104, %edx
 	movl	$1, %edi
 	xorl	%eax, %eax
 	call	__printf_chk@PLT
-.L227:
+.L243:
 	movzbl	_async_active_mask(%rip), %eax
 	addl	$1, test_total(%rip)
 	movq	%rax, %rdx
 	shrb	$4, %al
 	andl	$15, %edx
 	andl	$15, %eax
-	movzbl	(%rbx,%rax), %eax
-	addb	(%rbx,%rdx), %al
+	movzbl	0(%rbp,%rax), %eax
+	addb	0(%rbp,%rdx), %al
 	cmpb	$1, %al
-	jne	.L228
+	jne	.L244
 	addl	$1, test_passed(%rip)
-.L229:
+.L245:
 	movl	%r12d, %edi
 	addl	$1, test_total(%rip)
 	call	async_delay_remaining
 	cmpl	$50, %eax
-	jne	.L230
+	jne	.L246
 	addl	$1, test_passed(%rip)
-.L231:
+.L247:
 	addl	$1, test_total(%rip)
 	call	async_delay_ticks_until_next
 	cmpl	$50, %eax
-	jne	.L232
+	jne	.L248
 	addl	$1, test_passed(%rip)
-.L233:
+.L249:
 	movl	$20, %r13d
 	.p2align 4,,10
 	.p2align 3
-.L235:
+.L251:
 	movl	_async_tick_counter(%rip), %eax
 	addl	$1, %eax
 	movl	%eax, _async_tick_counter(%rip)
 	movzbl	_async_active_mask(%rip), %eax
 	testb	%al, %al
-	je	.L234
+	je	.L250
 	movl	_async_tick_counter(%rip), %eax
 	movl	_async_next_target(%rip), %edx
 	subl	%edx, %eax
 	cmpl	$32766, %eax
-	ja	.L234
+	ja	.L250
 	call	_async_delay_tick_walk
-.L234:
+.L250:
 	subl	$1, %r13d
-	jne	.L235
+	jne	.L251
 	movl	%r12d, %edi
 	addl	$1, test_total(%rip)
 	call	async_delay_remaining
 	cmpl	$30, %eax
-	jne	.L236
+	jne	.L252
 	addl	$1, test_passed(%rip)
-.L237:
+.L253:
 	addl	$1, test_total(%rip)
 	call	async_delay_ticks_until_next
 	cmpl	$30, %eax
-	jne	.L238
+	jne	.L254
 	addl	$1, test_passed(%rip)
-.L239:
+.L255:
 	addl	$1, test_total(%rip)
-	cmpb	$7, %bpl
-	ja	.L242
+	cmpb	$7, %bl
+	ja	.L258
 	movl	%r12d, %edi
 	call	async_delay_elapsed.part.0
 	testb	%al, %al
-	jne	.L496
-.L242:
+	jne	.L539
+.L258:
 	addl	$1, test_passed(%rip)
-.L241:
+.L257:
 	movl	$30, %r13d
 	.p2align 4,,10
 	.p2align 3
-.L244:
+.L260:
 	movl	_async_tick_counter(%rip), %eax
 	addl	$1, %eax
 	movl	%eax, _async_tick_counter(%rip)
 	movzbl	_async_active_mask(%rip), %eax
 	testb	%al, %al
-	je	.L243
+	je	.L259
 	movl	_async_tick_counter(%rip), %eax
 	movl	_async_next_target(%rip), %edx
 	subl	%edx, %eax
 	cmpl	$32766, %eax
-	ja	.L243
+	ja	.L259
 	call	_async_delay_tick_walk
-.L243:
+.L259:
 	subl	$1, %r13d
-	jne	.L244
+	jne	.L260
 	movl	test_total(%rip), %eax
 	leal	1(%rax), %r8d
 	movl	%r8d, test_total(%rip)
-	cmpb	$7, %bpl
-	ja	.L247
+	cmpb	$7, %bl
+	ja	.L263
 	movl	%r12d, %edi
 	call	async_delay_is_active.part.0
 	testb	%al, %al
-	jne	.L497
-.L247:
+	jne	.L540
+.L263:
 	addl	$1, test_passed(%rip)
-.L246:
+.L262:
 	addl	$1, %r8d
 	movl	%r12d, %edi
 	movl	%r8d, test_total(%rip)
 	call	async_delay_remaining
 	testl	%eax, %eax
-	jne	.L248
+	jne	.L264
 	addl	$1, test_passed(%rip)
-.L249:
+.L265:
 	leal	1(%r8), %eax
 	movl	%eax, test_total(%rip)
-	cmpb	$7, %bpl
-	ja	.L250
+	cmpb	$7, %bl
+	ja	.L266
 	movl	%r12d, %edi
 	call	async_delay_elapsed.part.0
 	subb	$1, %al
-	je	.L498
-	leaq	.LC79(%rip), %rcx
-	movl	$103, %edx
+	je	.L541
+	leaq	.LC100(%rip), %rcx
+	movl	$117, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
 	movl	test_total(%rip), %eax
 	leal	1(%rax), %r8d
-.L396:
+.L448:
 	movl	%r12d, %edi
 	movl	%r8d, test_total(%rip)
 	call	async_delay_elapsed.part.0
 	testb	%al, %al
-	jne	.L252
-.L397:
+	jne	.L268
+.L449:
 	addl	$1, test_passed(%rip)
-.L253:
+.L269:
 	movzbl	_async_active_mask(%rip), %eax
 	addl	$1, test_total(%rip)
 	movq	%rax, %rdx
 	shrb	$4, %al
 	andl	$15, %eax
 	andl	$15, %edx
-	movzbl	(%rbx,%rax), %eax
-	addb	(%rbx,%rdx), %al
-	jne	.L254
+	movzbl	0(%rbp,%rax), %eax
+	addb	0(%rbp,%rdx), %al
+	jne	.L270
 	addl	$1, test_passed(%rip)
-.L255:
+.L271:
 	leaq	.LC20(%rip), %rdi
 	call	puts@PLT
 	xorl	%edx, %edx
@@ -1224,156 +1351,62 @@ main:
 	movl	$0, cb_count1(%rip)
 	call	_async_delay_start_common
 	addl	$1, test_total(%rip)
-	movl	%eax, %ebp
+	movl	%eax, %ebx
 	cmpb	$-1, %al
-	je	.L256
+	je	.L272
 	addl	$1, test_passed(%rip)
-.L257:
+.L273:
 	movl	$39, %r12d
 	.p2align 4,,10
 	.p2align 3
-.L259:
-	movl	_async_tick_counter(%rip), %eax
-	addl	$1, %eax
-	movl	%eax, _async_tick_counter(%rip)
-	movzbl	_async_active_mask(%rip), %eax
-	testb	%al, %al
-	je	.L258
-	movl	_async_tick_counter(%rip), %eax
-	movl	_async_next_target(%rip), %edx
-	subl	%edx, %eax
-	cmpl	$32766, %eax
-	ja	.L258
-	call	_async_delay_tick_walk
-.L258:
-	subl	$1, %r12d
-	jne	.L259
-	movl	cb_count1(%rip), %eax
-	addl	$1, test_total(%rip)
-	testl	%eax, %eax
-	jne	.L260
-	addl	$1, test_passed(%rip)
-.L263:
-	movl	_async_tick_counter(%rip), %eax
-	addl	$1, %eax
-	movl	%eax, _async_tick_counter(%rip)
-	movzbl	_async_active_mask(%rip), %eax
-	testb	%al, %al
-	je	.L261
-	movl	_async_tick_counter(%rip), %eax
-	movl	_async_next_target(%rip), %edx
-	subl	%edx, %eax
-	cmpl	$32766, %eax
-	ja	.L261
-	call	_async_delay_tick_walk
-.L261:
-	movl	cb_count1(%rip), %eax
-	addl	$1, test_total(%rip)
-	cmpl	$1, %eax
-	jne	.L264
-	addl	$1, test_passed(%rip)
-.L265:
-	movzbl	last_cb_slot(%rip), %eax
-	addl	$1, test_total(%rip)
-	cmpb	%al, %bpl
-	jne	.L266
-	addl	$1, test_passed(%rip)
-.L267:
-	movl	$20, %ebp
-	.p2align 4,,10
-	.p2align 3
-.L269:
-	movl	_async_tick_counter(%rip), %eax
-	addl	$1, %eax
-	movl	%eax, _async_tick_counter(%rip)
-	movzbl	_async_active_mask(%rip), %eax
-	testb	%al, %al
-	je	.L268
-	movl	_async_tick_counter(%rip), %eax
-	movl	_async_next_target(%rip), %edx
-	subl	%edx, %eax
-	cmpl	$32766, %eax
-	ja	.L268
-	call	_async_delay_tick_walk
-.L268:
-	subl	$1, %ebp
-	jne	.L269
-	movl	cb_count1(%rip), %eax
-	addl	$1, test_total(%rip)
-	cmpl	$1, %eax
-	jne	.L270
-	addl	$1, test_passed(%rip)
-.L271:
-	movzbl	_async_active_mask(%rip), %eax
-	addl	$1, test_total(%rip)
-	movq	%rax, %rdx
-	shrb	$4, %al
-	andl	$15, %eax
-	andl	$15, %edx
-	movzbl	(%rbx,%rax), %eax
-	addb	(%rbx,%rdx), %al
-	jne	.L272
-	addl	$1, test_passed(%rip)
-.L273:
-	leaq	.LC27(%rip), %rdi
-	call	puts@PLT
-	movl	$1, %edx
-	movl	$25, %edi
-	leaq	test_cb_periodic(%rip), %rsi
-	call	async_delay_init
-	movl	$0, cb_count2(%rip)
-	call	_async_delay_start_common
-	addl	$1, test_total(%rip)
-	movl	%eax, %ebp
-	cmpb	$-1, %al
-	je	.L274
-	addl	$1, test_passed(%rip)
 .L275:
-	movl	$24, %r12d
-	.p2align 4,,10
-	.p2align 3
-.L277:
 	movl	_async_tick_counter(%rip), %eax
 	addl	$1, %eax
 	movl	%eax, _async_tick_counter(%rip)
 	movzbl	_async_active_mask(%rip), %eax
 	testb	%al, %al
-	je	.L276
+	je	.L274
 	movl	_async_tick_counter(%rip), %eax
 	movl	_async_next_target(%rip), %edx
 	subl	%edx, %eax
 	cmpl	$32766, %eax
-	ja	.L276
+	ja	.L274
 	call	_async_delay_tick_walk
-.L276:
+.L274:
 	subl	$1, %r12d
-	jne	.L277
-	movl	cb_count2(%rip), %eax
+	jne	.L275
+	movl	cb_count1(%rip), %eax
 	addl	$1, test_total(%rip)
 	testl	%eax, %eax
-	jne	.L278
+	jne	.L276
+	addl	$1, test_passed(%rip)
+.L279:
+	movl	_async_tick_counter(%rip), %eax
+	addl	$1, %eax
+	movl	%eax, _async_tick_counter(%rip)
+	movzbl	_async_active_mask(%rip), %eax
+	testb	%al, %al
+	je	.L277
+	movl	_async_tick_counter(%rip), %eax
+	movl	_async_next_target(%rip), %edx
+	subl	%edx, %eax
+	cmpl	$32766, %eax
+	ja	.L277
+	call	_async_delay_tick_walk
+.L277:
+	movl	cb_count1(%rip), %eax
+	addl	$1, test_total(%rip)
+	cmpl	$1, %eax
+	jne	.L280
 	addl	$1, test_passed(%rip)
 .L281:
-	movl	_async_tick_counter(%rip), %eax
-	addl	$1, %eax
-	movl	%eax, _async_tick_counter(%rip)
-	movzbl	_async_active_mask(%rip), %eax
-	testb	%al, %al
-	je	.L279
-	movl	_async_tick_counter(%rip), %eax
-	movl	_async_next_target(%rip), %edx
-	subl	%edx, %eax
-	cmpl	$32766, %eax
-	ja	.L279
-	call	_async_delay_tick_walk
-.L279:
-	movl	cb_count2(%rip), %eax
+	movzbl	last_cb_slot(%rip), %eax
 	addl	$1, test_total(%rip)
-	cmpl	$1, %eax
+	cmpb	%al, %bl
 	jne	.L282
 	addl	$1, test_passed(%rip)
 .L283:
-	movl	$25, %r12d
+	movl	$20, %ebx
 	.p2align 4,,10
 	.p2align 3
 .L285:
@@ -1390,59 +1423,64 @@ main:
 	ja	.L284
 	call	_async_delay_tick_walk
 .L284:
-	subl	$1, %r12d
+	subl	$1, %ebx
 	jne	.L285
-	movl	cb_count2(%rip), %eax
+	movl	cb_count1(%rip), %eax
 	addl	$1, test_total(%rip)
-	cmpl	$2, %eax
+	cmpl	$1, %eax
 	jne	.L286
 	addl	$1, test_passed(%rip)
 .L287:
-	movl	$25, %r12d
-	.p2align 4,,10
-	.p2align 3
-.L289:
-	movl	_async_tick_counter(%rip), %eax
-	addl	$1, %eax
-	movl	%eax, _async_tick_counter(%rip)
-	movzbl	_async_active_mask(%rip), %eax
-	testb	%al, %al
-	je	.L288
-	movl	_async_tick_counter(%rip), %eax
-	movl	_async_next_target(%rip), %edx
-	subl	%edx, %eax
-	cmpl	$32766, %eax
-	ja	.L288
-	call	_async_delay_tick_walk
-.L288:
-	subl	$1, %r12d
-	jne	.L289
-	movl	cb_count2(%rip), %eax
-	addl	$1, test_total(%rip)
-	cmpl	$3, %eax
-	jne	.L290
-	addl	$1, test_passed(%rip)
-.L291:
-	cmpb	$7, %bpl
-	ja	.L292
-	movzbl	%bpl, %edi
-	call	async_delay_cancel.part.0
-.L292:
 	movzbl	_async_active_mask(%rip), %eax
 	addl	$1, test_total(%rip)
 	movq	%rax, %rdx
 	shrb	$4, %al
 	andl	$15, %eax
 	andl	$15, %edx
-	movzbl	(%rbx,%rax), %eax
-	addb	(%rbx,%rdx), %al
-	jne	.L293
+	movzbl	0(%rbp,%rax), %eax
+	addb	0(%rbp,%rdx), %al
+	jne	.L288
 	addl	$1, test_passed(%rip)
-.L294:
-	movl	$50, %ebp
+.L289:
+	leaq	.LC27(%rip), %rdi
+	call	puts@PLT
+	movl	$1, %edx
+	movl	$25, %edi
+	leaq	test_cb_periodic(%rip), %rsi
+	call	async_delay_init
+	movl	$0, cb_count2(%rip)
+	call	_async_delay_start_common
+	addl	$1, test_total(%rip)
+	movl	%eax, %ebx
+	cmpb	$-1, %al
+	je	.L290
+	addl	$1, test_passed(%rip)
+.L291:
+	movl	$24, %r12d
 	.p2align 4,,10
 	.p2align 3
-.L296:
+.L293:
+	movl	_async_tick_counter(%rip), %eax
+	addl	$1, %eax
+	movl	%eax, _async_tick_counter(%rip)
+	movzbl	_async_active_mask(%rip), %eax
+	testb	%al, %al
+	je	.L292
+	movl	_async_tick_counter(%rip), %eax
+	movl	_async_next_target(%rip), %edx
+	subl	%edx, %eax
+	cmpl	$32766, %eax
+	ja	.L292
+	call	_async_delay_tick_walk
+.L292:
+	subl	$1, %r12d
+	jne	.L293
+	movl	cb_count2(%rip), %eax
+	addl	$1, test_total(%rip)
+	testl	%eax, %eax
+	jne	.L294
+	addl	$1, test_passed(%rip)
+.L297:
 	movl	_async_tick_counter(%rip), %eax
 	addl	$1, %eax
 	movl	%eax, _async_tick_counter(%rip)
@@ -1456,14 +1494,103 @@ main:
 	ja	.L295
 	call	_async_delay_tick_walk
 .L295:
-	subl	$1, %ebp
-	jne	.L296
+	movl	cb_count2(%rip), %eax
+	addl	$1, test_total(%rip)
+	cmpl	$1, %eax
+	jne	.L298
+	addl	$1, test_passed(%rip)
+.L299:
+	movl	$25, %r12d
+	.p2align 4,,10
+	.p2align 3
+.L301:
+	movl	_async_tick_counter(%rip), %eax
+	addl	$1, %eax
+	movl	%eax, _async_tick_counter(%rip)
+	movzbl	_async_active_mask(%rip), %eax
+	testb	%al, %al
+	je	.L300
+	movl	_async_tick_counter(%rip), %eax
+	movl	_async_next_target(%rip), %edx
+	subl	%edx, %eax
+	cmpl	$32766, %eax
+	ja	.L300
+	call	_async_delay_tick_walk
+.L300:
+	subl	$1, %r12d
+	jne	.L301
+	movl	cb_count2(%rip), %eax
+	addl	$1, test_total(%rip)
+	cmpl	$2, %eax
+	jne	.L302
+	addl	$1, test_passed(%rip)
+.L303:
+	movl	$25, %r12d
+	.p2align 4,,10
+	.p2align 3
+.L305:
+	movl	_async_tick_counter(%rip), %eax
+	addl	$1, %eax
+	movl	%eax, _async_tick_counter(%rip)
+	movzbl	_async_active_mask(%rip), %eax
+	testb	%al, %al
+	je	.L304
+	movl	_async_tick_counter(%rip), %eax
+	movl	_async_next_target(%rip), %edx
+	subl	%edx, %eax
+	cmpl	$32766, %eax
+	ja	.L304
+	call	_async_delay_tick_walk
+.L304:
+	subl	$1, %r12d
+	jne	.L305
 	movl	cb_count2(%rip), %eax
 	addl	$1, test_total(%rip)
 	cmpl	$3, %eax
-	jne	.L297
+	jne	.L306
 	addl	$1, test_passed(%rip)
-.L298:
+.L307:
+	cmpb	$7, %bl
+	ja	.L308
+	movzbl	%bl, %edi
+	call	async_delay_cancel.part.0
+.L308:
+	movzbl	_async_active_mask(%rip), %eax
+	addl	$1, test_total(%rip)
+	movq	%rax, %rdx
+	shrb	$4, %al
+	andl	$15, %eax
+	andl	$15, %edx
+	movzbl	0(%rbp,%rax), %eax
+	addb	0(%rbp,%rdx), %al
+	jne	.L309
+	addl	$1, test_passed(%rip)
+.L310:
+	movl	$50, %ebx
+	.p2align 4,,10
+	.p2align 3
+.L312:
+	movl	_async_tick_counter(%rip), %eax
+	addl	$1, %eax
+	movl	%eax, _async_tick_counter(%rip)
+	movzbl	_async_active_mask(%rip), %eax
+	testb	%al, %al
+	je	.L311
+	movl	_async_tick_counter(%rip), %eax
+	movl	_async_next_target(%rip), %edx
+	subl	%edx, %eax
+	cmpl	$32766, %eax
+	ja	.L311
+	call	_async_delay_tick_walk
+.L311:
+	subl	$1, %ebx
+	jne	.L312
+	movl	cb_count2(%rip), %eax
+	addl	$1, test_total(%rip)
+	cmpl	$3, %eax
+	jne	.L313
+	addl	$1, test_passed(%rip)
+.L314:
 	leaq	.LC35(%rip), %rdi
 	call	puts@PLT
 	xorl	%edx, %edx
@@ -1482,81 +1609,81 @@ main:
 	movl	%eax, %r13d
 	call	_async_delay_start_common
 	addl	$1, test_total(%rip)
-	movl	%eax, %ebp
+	movl	%eax, %ebx
 	movzbl	_async_active_mask(%rip), %eax
 	movq	%rax, %rdx
 	shrb	$4, %al
 	andl	$15, %edx
 	andl	$15, %eax
-	movzbl	(%rbx,%rax), %eax
-	addb	(%rbx,%rdx), %al
+	movzbl	0(%rbp,%rax), %eax
+	addb	0(%rbp,%rdx), %al
 	cmpb	$3, %al
-	jne	.L299
+	jne	.L315
 	addl	$1, test_passed(%rip)
-.L300:
+.L316:
 	movzbl	%r13b, %r14d
 	cmpb	$7, %r13b
-	ja	.L301
+	ja	.L317
 	movl	%r14d, %edi
 	call	async_delay_cancel.part.0
-.L301:
+.L317:
 	movzbl	_async_active_mask(%rip), %eax
 	addl	$1, test_total(%rip)
 	movq	%rax, %rdx
 	shrb	$4, %al
 	andl	$15, %edx
 	andl	$15, %eax
-	movzbl	(%rbx,%rax), %eax
-	addb	(%rbx,%rdx), %al
+	movzbl	0(%rbp,%rax), %eax
+	addb	0(%rbp,%rdx), %al
 	cmpb	$2, %al
-	jne	.L302
+	jne	.L318
 	addl	$1, test_passed(%rip)
-.L303:
+.L319:
 	movl	test_total(%rip), %eax
 	leal	1(%rax), %ecx
 	movl	%ecx, test_total(%rip)
 	cmpb	$7, %r13b
-	ja	.L306
+	ja	.L322
 	movl	%r14d, %edi
 	call	async_delay_is_active.part.0
 	testb	%al, %al
-	jne	.L499
-.L306:
+	jne	.L542
+.L322:
 	addl	$1, test_passed(%rip)
-.L305:
+.L321:
 	addl	$1, %ecx
 	movzbl	%r12b, %r14d
 	movl	%ecx, test_total(%rip)
 	cmpb	$7, %r12b
-	ja	.L307
+	ja	.L323
 	movl	%r14d, %edi
 	call	async_delay_is_active.part.0
 	subb	$1, %al
-	je	.L500
-.L307:
+	je	.L543
+.L323:
 	leaq	.LC39(%rip), %rcx
-	movl	$210, %edx
+	movl	$224, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
-.L308:
+.L324:
 	addl	$1, test_total(%rip)
-	movzbl	%bpl, %r13d
-	cmpb	$7, %bpl
-	ja	.L309
+	movzbl	%bl, %r13d
+	cmpb	$7, %bl
+	ja	.L325
 	movl	%r13d, %edi
 	call	async_delay_is_active.part.0
 	subb	$1, %al
-	je	.L501
-.L309:
+	je	.L544
+.L325:
 	leaq	.LC40(%rip), %rcx
-	movl	$211, %edx
+	movl	$225, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
-.L310:
+.L326:
 	call	async_delay_cancel_all
 	movzbl	_async_active_mask(%rip), %edx
 	movl	test_total(%rip), %eax
@@ -1566,178 +1693,147 @@ main:
 	andl	$15, %edx
 	andl	$15, %ecx
 	movl	%eax, test_total(%rip)
-	movzbl	(%rbx,%rdx), %edx
-	addb	(%rbx,%rcx), %dl
-	jne	.L311
+	movzbl	0(%rbp,%rdx), %edx
+	addb	0(%rbp,%rcx), %dl
+	jne	.L327
 	addl	$1, test_passed(%rip)
-.L312:
+.L328:
 	leal	1(%rax), %ecx
 	movl	%ecx, test_total(%rip)
 	cmpb	$7, %r12b
-	ja	.L315
+	ja	.L331
 	movl	%r14d, %edi
 	call	async_delay_is_active.part.0
 	testb	%al, %al
-	jne	.L502
-.L315:
+	jne	.L545
+.L331:
 	addl	$1, test_passed(%rip)
-.L314:
+.L330:
 	leal	1(%rcx), %eax
 	movl	%eax, test_total(%rip)
-	cmpb	$7, %bpl
-	ja	.L318
+	cmpb	$7, %bl
+	ja	.L334
 	movl	%r13d, %edi
 	call	async_delay_is_active.part.0
 	testb	%al, %al
-	jne	.L503
-.L318:
+	jne	.L546
+.L334:
 	addl	$1, test_passed(%rip)
-.L317:
+.L333:
 	leaq	.LC44(%rip), %rdi
-	movl	$40, %ebp
+	movl	$40, %r12d
 	call	puts@PLT
 	xorl	%edx, %edx
 	xorl	%esi, %esi
 	movl	$100, %edi
 	call	async_delay_init
 	call	_async_delay_start_common
-	movl	%eax, %r12d
+	movl	%eax, %ebx
 	.p2align 4,,10
 	.p2align 3
-.L320:
+.L336:
 	movl	_async_tick_counter(%rip), %eax
 	addl	$1, %eax
 	movl	%eax, _async_tick_counter(%rip)
 	movzbl	_async_active_mask(%rip), %eax
 	testb	%al, %al
-	je	.L319
+	je	.L335
 	movl	_async_tick_counter(%rip), %eax
 	movl	_async_next_target(%rip), %edx
 	subl	%edx, %eax
 	cmpl	$32766, %eax
-	ja	.L319
+	ja	.L335
 	call	_async_delay_tick_walk
-.L319:
-	subl	$1, %ebp
-	jne	.L320
-	movzbl	%r12b, %r13d
+.L335:
+	subl	$1, %r12d
+	jne	.L336
+	movzbl	%bl, %r12d
 	addl	$1, test_total(%rip)
-	movl	%r13d, %edi
+	movl	%r12d, %edi
 	call	async_delay_remaining
 	cmpl	$60, %eax
-	jne	.L321
+	jne	.L337
 	addl	$1, test_passed(%rip)
-.L322:
-	movl	test_total(%rip), %eax
-	leaq	_async_slot_bit(%rip), %rbp
-	addl	$1, %eax
-	cmpb	$7, %r12b
-	ja	.L323
-	movslq	%r13d, %rdx
-	movzbl	_async_used_mask(%rip), %esi
-	movzbl	0(%rbp,%rdx), %ecx
-	testb	%sil, %cl
-	je	.L323
-	imulq	$24, %rdx, %rsi
-	leaq	_async_slots(%rip), %rdx
-	movzbl	SREG(%rip), %r8d
-	movl	_async_tick_counter(%rip), %edi
-	addl	$30, %edi
-	addq	%rsi, %rdx
-	movzbl	16(%rdx), %esi
-	movl	$30, 4(%rdx)
-	movl	%edi, (%rdx)
-	andl	$4, %esi
-	cmpb	$1, %sil
-	sbbl	%esi, %esi
-	andl	$-4, %esi
-	addl	$5, %esi
-	movb	%sil, 16(%rdx)
-	movzbl	_async_active_mask(%rip), %edx
-	testb	%dl, %dl
-	je	.L325
-	movl	_async_next_target(%rip), %esi
-	subl	%edi, %esi
-	cmpl	$32766, %esi
-	jbe	.L325
-.L326:
-	orl	%edx, %ecx
+.L338:
+	movl	$30, %esi
+	movl	%r12d, %edi
+	call	async_delay_restart
+	addl	$1, test_total(%rip)
+	cmpb	$1, %al
+	jne	.L339
 	addl	$1, test_passed(%rip)
-	movb	%cl, _async_active_mask(%rip)
-	movl	%eax, test_total(%rip)
-	movb	%r8b, SREG(%rip)
-.L327:
-	movl	%r13d, %edi
+.L340:
+	movl	%r12d, %edi
 	addl	$1, test_total(%rip)
 	call	async_delay_remaining
 	cmpl	$30, %eax
-	jne	.L328
+	jne	.L341
 	addl	$1, test_passed(%rip)
-.L329:
-	movl	$29, %r14d
+.L342:
+	movl	$29, %r13d
 	.p2align 4,,10
 	.p2align 3
-.L331:
+.L344:
 	movl	_async_tick_counter(%rip), %eax
 	addl	$1, %eax
 	movl	%eax, _async_tick_counter(%rip)
 	movzbl	_async_active_mask(%rip), %eax
 	testb	%al, %al
-	je	.L330
+	je	.L343
 	movl	_async_tick_counter(%rip), %eax
 	movl	_async_next_target(%rip), %edx
 	subl	%edx, %eax
 	cmpl	$32766, %eax
-	ja	.L330
+	ja	.L343
 	call	_async_delay_tick_walk
-.L330:
-	subl	$1, %r14d
-	jne	.L331
+.L343:
+	subl	$1, %r13d
+	jne	.L344
 	movl	test_total(%rip), %r8d
 	leal	1(%r8), %eax
 	movl	%eax, test_total(%rip)
-	cmpb	$7, %r12b
-	ja	.L332
-	movl	%r13d, %edi
+	cmpb	$7, %bl
+	ja	.L345
+	movl	%r12d, %edi
 	call	async_delay_elapsed.part.0
 	testb	%al, %al
-	jne	.L504
+	jne	.L547
 	movl	_async_tick_counter(%rip), %eax
 	addl	$1, test_passed(%rip)
 	addl	$1, %eax
 	movl	%eax, _async_tick_counter(%rip)
 	movzbl	_async_active_mask(%rip), %eax
 	testb	%al, %al
-	je	.L505
-.L338:
+	je	.L548
+.L351:
 	movl	_async_tick_counter(%rip), %edx
 	movl	_async_next_target(%rip), %eax
 	subl	%eax, %edx
 	movl	test_total(%rip), %eax
 	cmpl	$32766, %edx
-	ja	.L339
+	ja	.L352
 	call	_async_delay_tick_walk
 	movl	test_total(%rip), %eax
-.L339:
+.L352:
 	addl	$1, %eax
 	movl	%eax, test_total(%rip)
-	cmpb	$7, %r12b
-	ja	.L340
-.L395:
-	movl	%r13d, %edi
+	cmpb	$7, %bl
+	ja	.L353
+.L447:
+	movl	%r12d, %edi
 	call	async_delay_elapsed.part.0
 	subb	$1, %al
-	je	.L506
+	je	.L549
 	.p2align 4,,10
 	.p2align 3
-.L340:
+.L353:
 	leaq	.LC49(%rip), %rcx
-	movl	$242, %edx
+	movl	$256, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
-.L341:
+.L354:
 	leaq	.LC50(%rip), %rdi
 	call	puts@PLT
 	xorl	%edx, %edx
@@ -1746,251 +1842,253 @@ main:
 	call	async_delay_init
 	movl	$65525, _async_tick_counter(%rip)
 	call	_async_delay_start_common
-	movl	%eax, %r12d
+	movl	%eax, %ebx
 	movl	test_total(%rip), %eax
 	addl	$1, %eax
 	movl	%eax, test_total(%rip)
-	cmpb	$-1, %r12b
-	je	.L342
+	cmpb	$-1, %bl
+	je	.L355
 	addl	$1, test_passed(%rip)
-.L343:
-	movzbl	%r12b, %r13d
+.L356:
+	movzbl	%bl, %r12d
 	addl	$1, %eax
-	movl	%r13d, %edi
+	movl	%r12d, %edi
 	movl	%eax, test_total(%rip)
 	call	async_delay_remaining
 	cmpl	$20, %eax
-	jne	.L344
+	jne	.L357
 	addl	$1, test_passed(%rip)
-.L345:
-	movl	$19, %r14d
+.L358:
+	movl	$19, %r13d
 	.p2align 4,,10
 	.p2align 3
-.L347:
+.L360:
 	movl	_async_tick_counter(%rip), %eax
 	addl	$1, %eax
 	movl	%eax, _async_tick_counter(%rip)
 	movzbl	_async_active_mask(%rip), %eax
 	testb	%al, %al
-	je	.L346
+	je	.L359
 	movl	_async_tick_counter(%rip), %eax
 	movl	_async_next_target(%rip), %edx
 	subl	%edx, %eax
 	cmpl	$32766, %eax
-	ja	.L346
+	ja	.L359
 	call	_async_delay_tick_walk
-.L346:
-	subl	$1, %r14d
-	jne	.L347
+.L359:
+	subl	$1, %r13d
+	jne	.L360
 	movl	test_total(%rip), %r8d
 	leal	1(%r8), %eax
 	movl	%eax, test_total(%rip)
-	cmpb	$7, %r12b
-	ja	.L348
-	movl	%r13d, %edi
+	cmpb	$7, %bl
+	ja	.L361
+	movl	%r12d, %edi
 	call	async_delay_elapsed.part.0
 	testb	%al, %al
-	jne	.L507
+	jne	.L550
 	movl	_async_tick_counter(%rip), %eax
 	addl	$1, test_passed(%rip)
 	addl	$1, %eax
 	movl	%eax, _async_tick_counter(%rip)
 	movzbl	_async_active_mask(%rip), %eax
 	testb	%al, %al
-	je	.L508
-.L354:
+	je	.L551
+.L367:
 	movl	_async_tick_counter(%rip), %edx
 	movl	_async_next_target(%rip), %eax
 	subl	%eax, %edx
 	movl	test_total(%rip), %eax
 	cmpl	$32766, %edx
-	ja	.L355
+	ja	.L368
 	call	_async_delay_tick_walk
 	movl	test_total(%rip), %eax
-.L355:
+.L368:
 	addl	$1, %eax
 	movl	%eax, test_total(%rip)
-	cmpb	$7, %r12b
-	ja	.L356
-.L394:
-	movl	%r13d, %edi
+	cmpb	$7, %bl
+	ja	.L369
+.L446:
+	movl	%r12d, %edi
 	call	async_delay_elapsed.part.0
 	subb	$1, %al
-	je	.L509
+	je	.L552
 	.p2align 4,,10
 	.p2align 3
-.L356:
+.L369:
 	leaq	.LC54(%rip), %rcx
-	movl	$273, %edx
+	movl	$287, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
-.L357:
+.L370:
 	leaq	.LC55(%rip), %rdi
-	leaq	30(%rsp), %r15
+	leaq	30(%rsp), %r14
 	call	puts@PLT
-	leaq	38(%rsp), %r12
-	leaq	.LC56(%rip), %r14
+	leaq	38(%rsp), %rbx
+	leaq	.LC56(%rip), %r13
 	call	async_delay_init
-	movl	test_total(%rip), %r13d
-	jmp	.L360
+	leaq	.LC5(%rip), %r12
+	movl	test_total(%rip), %r15d
+	jmp	.L373
 	.p2align 4,,10
 	.p2align 3
-.L511:
-	addq	$1, %r15
+.L554:
+	addq	$1, %r14
 	addl	$1, test_passed(%rip)
-	cmpq	%r12, %r15
-	je	.L510
-.L360:
+	cmpq	%r14, %rbx
+	je	.L553
+.L373:
 	xorl	%edx, %edx
 	xorl	%esi, %esi
 	movl	$100, %edi
-	addl	$1, %r13d
+	addl	$1, %r15d
 	call	_async_delay_start_common
-	movl	%r13d, test_total(%rip)
-	movb	%al, (%r15)
+	movl	%r15d, test_total(%rip)
+	movb	%al, (%r14)
 	cmpb	$-1, %al
-	jne	.L511
-	movq	%r14, %rcx
-	movl	$289, %edx
+	jne	.L554
+	movq	%r13, %rcx
+	movl	$303, %edx
+	movq	%r12, %rsi
 	movl	$1, %edi
 	xorl	%eax, %eax
-	leaq	.LC5(%rip), %rsi
-	addq	$1, %r15
+	addq	$1, %r14
 	call	__printf_chk@PLT
-	movl	test_total(%rip), %r13d
-	cmpq	%r12, %r15
-	jne	.L360
-.L510:
+	movl	test_total(%rip), %r15d
+	cmpq	%r14, %rbx
+	jne	.L373
+.L553:
 	xorl	%edx, %edx
 	xorl	%esi, %esi
 	movl	$100, %edi
+	addl	$1, %r15d
 	call	_async_delay_start_common
-	leal	1(%r13), %ecx
-	movl	%ecx, test_total(%rip)
+	movl	%r15d, test_total(%rip)
 	cmpb	$-1, %al
-	jne	.L361
+	jne	.L374
 	addl	$1, test_passed(%rip)
-.L362:
+.L375:
 	movzbl	30(%rsp), %edi
 	cmpb	$7, %dil
-	ja	.L363
+	ja	.L376
 	call	async_delay_cancel.part.0
-.L363:
+.L376:
 	xorl	%edx, %edx
 	xorl	%esi, %esi
 	movl	$100, %edi
 	call	_async_delay_start_common
 	addl	$1, test_total(%rip)
 	cmpb	$-1, %al
-	je	.L364
+	je	.L377
 	addl	$1, test_passed(%rip)
-.L365:
-	call	async_delay_cancel_all
-	xorl	%r14d, %r14d
+.L378:
 	leaq	.LC59(%rip), %rdi
+	xorl	%ebx, %ebx
+	leaq	_async_slot_bit(%rip), %r14
 	movl	$1, %r12d
-	call	puts@PLT
+	call	async_delay_cancel_all
 	leaq	.LC60(%rip), %r15
 	leaq	.LC5(%rip), %r13
-	jmp	.L368
+	call	puts@PLT
+	jmp	.L381
 	.p2align 4,,10
 	.p2align 3
-.L513:
+.L556:
 	addl	$2, %eax
-	addq	$1, %r14
+	addq	$1, %rbx
 	addl	$2, test_passed(%rip)
 	movl	%eax, test_total(%rip)
-	cmpq	$8, %r14
-	je	.L512
-.L368:
+	cmpq	$8, %rbx
+	je	.L555
+.L381:
 	movl	test_total(%rip), %eax
-	movl	%r14d, %ecx
+	movl	%ebx, %ecx
 	leal	1(%rax), %edx
 	movl	%edx, test_total(%rip)
 	movl	%r12d, %edx
 	sall	%cl, %edx
-	cmpb	%dl, 0(%rbp,%r14)
-	je	.L513
+	cmpb	%dl, (%r14,%rbx)
+	je	.L556
 	movq	%r15, %rcx
-	movl	$313, %edx
+	movl	$327, %edx
 	movq	%r13, %rsi
 	movl	$1, %edi
 	xorl	%eax, %eax
-	addq	$1, %r14
+	addq	$1, %rbx
 	call	__printf_chk@PLT
-	movl	$314, %edx
+	movl	$328, %edx
 	movq	%r13, %rsi
 	xorl	%eax, %eax
 	leaq	.LC61(%rip), %rcx
 	movl	$1, %edi
 	addl	$1, test_total(%rip)
 	call	__printf_chk@PLT
-	cmpq	$8, %r14
-	jne	.L368
-.L512:
+	cmpq	$8, %rbx
+	jne	.L381
+.L555:
 	leaq	.LC62(%rip), %rdi
 	call	puts@PLT
 	call	async_delay_init
 	movl	test_total(%rip), %eax
-	leal	1(%rax), %ebp
+	leal	1(%rax), %ebx
 	movzbl	_async_active_mask(%rip), %eax
-	movl	%ebp, test_total(%rip)
+	movl	%ebx, test_total(%rip)
 	movq	%rax, %rdx
 	shrb	$4, %al
 	andl	$15, %eax
 	andl	$15, %edx
-	movzbl	(%rbx,%rax), %eax
-	addb	(%rbx,%rdx), %al
-	jne	.L369
+	movzbl	0(%rbp,%rax), %eax
+	addb	0(%rbp,%rdx), %al
+	jne	.L382
 	addl	$1, test_passed(%rip)
-.L370:
+.L383:
 	xorl	%edx, %edx
 	xorl	%esi, %esi
 	movl	$100, %edi
-	addl	$1, %ebp
+	addl	$1, %ebx
 	call	_async_delay_start_common
-	movl	%ebp, test_total(%rip)
+	movl	%ebx, test_total(%rip)
 	testb	%al, %al
-	jne	.L371
+	jne	.L384
 	addl	$1, test_passed(%rip)
-.L372:
+.L385:
 	movzbl	_async_active_mask(%rip), %eax
-	addl	$1, %ebp
-	movl	%ebp, test_total(%rip)
+	addl	$1, %ebx
+	movl	%ebx, test_total(%rip)
 	movq	%rax, %rdx
 	shrb	$4, %al
 	andl	$15, %edx
 	andl	$15, %eax
-	movzbl	(%rbx,%rax), %eax
-	addb	(%rbx,%rdx), %al
+	movzbl	0(%rbp,%rax), %eax
+	addb	0(%rbp,%rdx), %al
 	cmpb	$1, %al
-	jne	.L373
+	jne	.L386
 	addl	$1, test_passed(%rip)
-.L374:
+.L387:
 	xorl	%edx, %edx
 	xorl	%esi, %esi
 	movl	$100, %edi
 	call	_async_delay_start_common
 	addl	$1, test_total(%rip)
-	movl	%eax, %ebp
+	movl	%eax, %ebx
 	cmpb	$1, %al
-	jne	.L375
+	jne	.L388
 	addl	$1, test_passed(%rip)
-.L376:
+.L389:
 	movzbl	_async_active_mask(%rip), %eax
 	addl	$1, test_total(%rip)
 	movq	%rax, %rdx
 	shrb	$4, %al
 	andl	$15, %edx
 	andl	$15, %eax
-	movzbl	(%rbx,%rax), %eax
-	addb	(%rbx,%rdx), %al
+	movzbl	0(%rbp,%rax), %eax
+	addb	0(%rbp,%rdx), %al
 	cmpb	$2, %al
-	jne	.L377
+	jne	.L390
 	addl	$1, test_passed(%rip)
-.L378:
+.L391:
 	xorl	%edx, %edx
 	xorl	%esi, %esi
 	movl	$100, %edi
@@ -2004,11 +2102,11 @@ main:
 	leal	1(%rdi), %edx
 	movl	%edx, test_total(%rip)
 	cmpb	$2, %r12b
-	jne	.L379
+	jne	.L392
 	cmpb	$3, %al
-	jne	.L379
+	jne	.L392
 	addl	$1, test_passed(%rip)
-.L380:
+.L393:
 	movzbl	_async_active_mask(%rip), %eax
 	addl	$1, %edx
 	movl	%edx, test_total(%rip)
@@ -2016,50 +2114,50 @@ main:
 	shrb	$4, %al
 	andl	$15, %edx
 	andl	$15, %eax
-	movzbl	(%rbx,%rax), %eax
-	addb	(%rbx,%rdx), %al
+	movzbl	0(%rbp,%rax), %eax
+	addb	0(%rbp,%rdx), %al
 	cmpb	$4, %al
-	jne	.L381
+	jne	.L394
 	addl	$1, test_passed(%rip)
-.L382:
-	cmpb	$7, %bpl
-	ja	.L383
-	movzbl	%bpl, %edi
+.L395:
+	cmpb	$7, %bl
+	ja	.L396
+	movzbl	%bl, %edi
 	call	async_delay_cancel.part.0
-.L383:
+.L396:
 	movzbl	_async_active_mask(%rip), %eax
 	addl	$1, test_total(%rip)
 	movq	%rax, %rdx
 	shrb	$4, %al
 	andl	$15, %edx
 	andl	$15, %eax
-	movzbl	(%rbx,%rax), %eax
-	addb	(%rbx,%rdx), %al
+	movzbl	0(%rbp,%rax), %eax
+	addb	0(%rbp,%rdx), %al
 	cmpb	$3, %al
-	jne	.L384
+	jne	.L397
 	addl	$1, test_passed(%rip)
-.L385:
+.L398:
 	xorl	%edx, %edx
 	xorl	%esi, %esi
 	movl	$100, %edi
 	call	_async_delay_start_common
 	addl	$1, test_total(%rip)
 	cmpb	$1, %al
-	jne	.L386
+	jne	.L399
 	addl	$1, test_passed(%rip)
-.L387:
+.L400:
 	movzbl	_async_active_mask(%rip), %eax
 	addl	$1, test_total(%rip)
 	movq	%rax, %rdx
 	shrb	$4, %al
 	andl	$15, %edx
 	andl	$15, %eax
-	movzbl	(%rbx,%rax), %eax
-	addb	(%rbx,%rdx), %al
+	movzbl	0(%rbp,%rax), %eax
+	addb	0(%rbp,%rdx), %al
 	cmpb	$4, %al
-	jne	.L388
+	jne	.L401
 	addl	$1, test_passed(%rip)
-.L389:
+.L402:
 	call	async_delay_cancel_all
 	movzbl	_async_active_mask(%rip), %eax
 	addl	$1, test_total(%rip)
@@ -2067,33 +2165,269 @@ main:
 	shrb	$4, %al
 	andl	$15, %eax
 	andl	$15, %edx
-	movzbl	(%rbx,%rax), %eax
-	addb	(%rbx,%rdx), %al
-	jne	.L390
+	movzbl	0(%rbp,%rax), %eax
+	addb	0(%rbp,%rdx), %al
+	jne	.L403
 	addl	$1, test_passed(%rip)
-.L391:
+.L404:
 	leaq	.LC74(%rip), %rdi
+	call	puts@PLT
+	movb	$0, TCCR2(%rip)
+	movb	$0, OCR2(%rip)
+	movb	$0, TIMSK(%rip)
+	movb	$12, TCCR2(%rip)
+	movb	$0, TCNT2(%rip)
+	movb	$124, OCR2(%rip)
+	movzbl	TIMSK(%rip), %eax
+	addl	$1, test_total(%rip)
+	orl	$-128, %eax
+	movb	%al, TIMSK(%rip)
+	movzbl	TCCR2(%rip), %eax
+	cmpb	$12, %al
+	jne	.L405
+	addl	$1, test_passed(%rip)
+.L406:
+	movzbl	OCR2(%rip), %eax
+	addl	$1, test_total(%rip)
+	cmpb	$124, %al
+	jne	.L407
+	addl	$1, test_passed(%rip)
+.L408:
+	movzbl	TIMSK(%rip), %eax
+	addl	$1, test_total(%rip)
+	testb	%al, %al
+	jns	.L409
+	addl	$1, test_passed(%rip)
+.L410:
+	movb	$0, TCCR2(%rip)
+	movb	$0, OCR2(%rip)
+	movb	$0, TIMSK(%rip)
+	movb	$12, TCCR2(%rip)
+	movb	$0, TCNT2(%rip)
+	movb	$-7, OCR2(%rip)
+	movzbl	TIMSK(%rip), %eax
+	addl	$1, test_total(%rip)
+	orl	$-128, %eax
+	movb	%al, TIMSK(%rip)
+	movzbl	TCCR2(%rip), %eax
+	cmpb	$12, %al
+	jne	.L411
+	addl	$1, test_passed(%rip)
+.L412:
+	movzbl	OCR2(%rip), %eax
+	addl	$1, test_total(%rip)
+	cmpb	$-7, %al
+	jne	.L413
+	addl	$1, test_passed(%rip)
+.L414:
+	movb	$0, TCCR2(%rip)
+	movb	$0, OCR2(%rip)
+	movb	$0, TIMSK(%rip)
+	movb	$11, TCCR2(%rip)
+	movb	$0, TCNT2(%rip)
+	movb	$124, OCR2(%rip)
+	movzbl	TIMSK(%rip), %eax
+	addl	$1, test_total(%rip)
+	orl	$-128, %eax
+	movb	%al, TIMSK(%rip)
+	movzbl	TCCR2(%rip), %eax
+	cmpb	$11, %al
+	jne	.L415
+	addl	$1, test_passed(%rip)
+.L416:
+	movzbl	OCR2(%rip), %eax
+	addl	$1, test_total(%rip)
+	cmpb	$124, %al
+	jne	.L417
+	addl	$1, test_passed(%rip)
+.L418:
+	movb	$0, TCCR2(%rip)
+	movb	$0, OCR2(%rip)
+	movb	$0, TIMSK(%rip)
+	movb	$10, TCCR2(%rip)
+	movb	$0, TCNT2(%rip)
+	movb	$-7, OCR2(%rip)
+	movzbl	TIMSK(%rip), %eax
+	addl	$1, test_total(%rip)
+	orl	$-128, %eax
+	movb	%al, TIMSK(%rip)
+	movzbl	TCCR2(%rip), %eax
+	cmpb	$10, %al
+	jne	.L419
+	addl	$1, test_passed(%rip)
+.L420:
+	movzbl	OCR2(%rip), %eax
+	addl	$1, test_total(%rip)
+	cmpb	$-7, %al
+	jne	.L421
+	addl	$1, test_passed(%rip)
+.L422:
+	movb	$0, TCCR2(%rip)
+	movb	$0, OCR2(%rip)
+	movb	$0, TIMSK(%rip)
+	movb	$10, TCCR2(%rip)
+	movb	$0, TCNT2(%rip)
+	movb	$124, OCR2(%rip)
+	movzbl	TIMSK(%rip), %eax
+	addl	$1, test_total(%rip)
+	orl	$-128, %eax
+	movb	%al, TIMSK(%rip)
+	movzbl	TCCR2(%rip), %eax
+	cmpb	$10, %al
+	jne	.L423
+	addl	$1, test_passed(%rip)
+.L424:
+	movzbl	OCR2(%rip), %eax
+	addl	$1, test_total(%rip)
+	cmpb	$124, %al
+	jne	.L425
+	addl	$1, test_passed(%rip)
+.L426:
+	movb	$0, TCCR1A(%rip)
+	movb	$0, TCCR1B(%rip)
+	movb	$0, OCR1AH(%rip)
+	movb	$0, OCR1AL(%rip)
+	movb	$0, TIMSK(%rip)
+	movb	$0, TCCR1A(%rip)
+	movb	$10, TCCR1B(%rip)
+	movb	$0, TCNT1H(%rip)
+	movb	$0, TCNT1L(%rip)
+	movb	$3, OCR1AH(%rip)
+	movb	$-25, OCR1AL(%rip)
+	movzbl	TIMSK(%rip), %eax
+	addl	$1, test_total(%rip)
+	orl	$16, %eax
+	movb	%al, TIMSK(%rip)
+	movzbl	TCCR1B(%rip), %eax
+	cmpb	$10, %al
+	jne	.L427
+	addl	$1, test_passed(%rip)
+.L428:
+	movzbl	OCR1AH(%rip), %eax
+	addl	$1, test_total(%rip)
+	cmpb	$3, %al
+	jne	.L429
+	movzbl	OCR1AL(%rip), %eax
+	cmpb	$-25, %al
+	je	.L557
+.L429:
+	leaq	.LC87(%rip), %rcx
+	movl	$403, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+.L430:
+	movb	$0, TCCR1A(%rip)
+	movb	$0, TCNT1H(%rip)
+	movb	$0, TCNT1L(%rip)
+	movb	$7, OCR1AH(%rip)
+	movb	$-49, OCR1AL(%rip)
+	movb	$10, TCCR1B(%rip)
+	movzbl	TIMSK(%rip), %eax
+	addl	$1, test_total(%rip)
+	orl	$16, %eax
+	movb	%al, TIMSK(%rip)
+	movzbl	OCR1AH(%rip), %eax
+	cmpb	$7, %al
+	jne	.L431
+	movzbl	OCR1AL(%rip), %eax
+	cmpb	$-49, %al
+	je	.L558
+.L431:
+	leaq	.LC88(%rip), %rcx
+	movl	$406, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+.L432:
+	movb	$0, TCCR2(%rip)
+	movb	$0, OCR2(%rip)
+	movb	$0, TIMSK(%rip)
+	movb	$0, TCNT2(%rip)
+	movb	$-7, OCR2(%rip)
+	movb	$11, TCCR2(%rip)
+	movzbl	TIMSK(%rip), %eax
+	addl	$1, test_total(%rip)
+	orl	$-128, %eax
+	movb	%al, TIMSK(%rip)
+	movzbl	TCCR2(%rip), %eax
+	cmpb	$11, %al
+	jne	.L433
+	addl	$1, test_passed(%rip)
+.L434:
+	movzbl	OCR2(%rip), %eax
+	addl	$1, test_total(%rip)
+	cmpb	$-7, %al
+	jne	.L435
+	addl	$1, test_passed(%rip)
+.L436:
+	leaq	.LC91(%rip), %rdi
+	call	puts@PLT
+	xorl	%edx, %edx
+	xorl	%esi, %esi
+	movl	$32767, %edi
+	call	async_delay_init
+	movl	test_passed(%rip), %r12d
+	movl	test_total(%rip), %ebx
+	leal	1(%r12), %eax
+	movl	%eax, test_passed(%rip)
+	call	_async_delay_start_common
+	leal	2(%rbx), %r10d
+	movl	%r10d, test_total(%rip)
+	movl	%eax, %ebp
+	cmpb	$-1, %al
+	je	.L437
+	addl	$2, %r12d
+	movl	%r12d, test_passed(%rip)
+.L438:
+	movzbl	%bpl, %ebx
+	addl	$1, %r10d
+	movl	$32768, %esi
+	movl	%ebx, %edi
+	movl	%r10d, test_total(%rip)
+	call	async_delay_restart
+	testb	%al, %al
+	jne	.L439
+	addl	$1, test_passed(%rip)
+.L440:
+	addl	$1, %r10d
+	movl	$100, %esi
+	movl	%ebx, %edi
+	movl	%r10d, test_total(%rip)
+	call	async_delay_restart
+	cmpb	$1, %al
+	jne	.L441
+	addl	$1, test_passed(%rip)
+.L442:
+	cmpb	$7, %bpl
+	ja	.L443
+	movl	%ebx, %edi
+	call	async_delay_cancel.part.0
+.L443:
+	leaq	.LC95(%rip), %rdi
 	call	puts@PLT
 	movl	test_total(%rip), %edx
 	movl	test_passed(%rip), %ecx
 	xorl	%eax, %eax
-	leaq	.LC75(%rip), %rsi
+	leaq	.LC96(%rip), %rsi
 	movl	$1, %edi
 	movl	%edx, %r8d
 	subl	%ecx, %r8d
 	call	__printf_chk@PLT
-	leaq	.LC76(%rip), %rdi
+	leaq	.LC97(%rip), %rdi
 	call	puts@PLT
 	movl	test_total(%rip), %eax
 	cmpl	%eax, test_passed(%rip)
-	je	.L514
-	leaq	.LC78(%rip), %rdi
+	je	.L559
+	leaq	.LC99(%rip), %rdi
 	call	puts@PLT
 	movl	$1, %eax
-.L218:
+.L234:
 	movq	40(%rsp), %rdx
 	subq	%fs:40, %rdx
-	jne	.L515
+	jne	.L560
 	addq	$56, %rsp
 	.cfi_remember_state
 	.cfi_def_cfa_offset 56
@@ -2110,495 +2444,620 @@ main:
 	popq	%r15
 	.cfi_def_cfa_offset 8
 	ret
-.L498:
+.L541:
 	.cfi_restore_state
 	addl	$1, test_passed(%rip)
 	addl	$2, %r8d
-	jmp	.L396
-.L495:
+	jmp	.L448
+.L538:
 	addl	$2, %ecx
 	movl	%ecx, test_passed(%rip)
-	jmp	.L227
-.L497:
+	jmp	.L243
+.L540:
 	leaq	.LC16(%rip), %rcx
-	movl	$101, %edx
+	movl	$115, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
 	movl	test_total(%rip), %r8d
-	jmp	.L246
-.L496:
+	jmp	.L262
+.L539:
 	leaq	.LC15(%rip), %rcx
-	movl	$98, %edx
+	movl	$112, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
-	jmp	.L241
-.L325:
-	movl	%edi, _async_next_target(%rip)
-	jmp	.L326
-.L381:
-	leaq	.LC69(%rip), %rcx
-	movl	$343, %edx
+	jmp	.L257
+.L441:
+	leaq	.LC94(%rip), %rcx
+	movl	$430, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
-	jmp	.L382
-.L388:
+	jmp	.L442
+.L435:
+	leaq	.LC90(%rip), %rcx
+	movl	$411, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L436
+.L433:
+	leaq	.LC89(%rip), %rcx
+	movl	$410, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L434
+.L427:
+	leaq	.LC86(%rip), %rcx
+	movl	$402, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L428
+.L425:
+	leaq	.LC85(%rip), %rcx
+	movl	$398, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L426
+.L423:
+	leaq	.LC84(%rip), %rcx
+	movl	$397, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L424
+.L421:
+	leaq	.LC83(%rip), %rcx
+	movl	$393, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L422
+.L419:
+	leaq	.LC82(%rip), %rcx
+	movl	$392, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L420
+.L417:
+	leaq	.LC81(%rip), %rcx
+	movl	$388, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L418
+.L415:
+	leaq	.LC80(%rip), %rcx
+	movl	$387, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L416
+.L413:
+	leaq	.LC79(%rip), %rcx
+	movl	$383, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L414
+.L411:
+	leaq	.LC78(%rip), %rcx
+	movl	$382, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L412
+.L407:
+	leaq	.LC76(%rip), %rcx
+	movl	$377, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L408
+.L405:
+	leaq	.LC75(%rip), %rcx
+	movl	$376, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L406
+.L401:
 	leaq	.LC72(%rip), %rcx
+	movl	$364, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L402
+.L399:
+	leaq	.LC71(%rip), %rcx
+	movl	$363, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L400
+.L397:
+	leaq	.LC70(%rip), %rcx
+	movl	$361, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L398
+.L394:
+	leaq	.LC69(%rip), %rcx
+	movl	$357, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L395
+.L390:
+	leaq	.LC67(%rip), %rcx
 	movl	$350, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L391
+.L388:
+	leaq	.LC66(%rip), %rcx
+	movl	$349, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
 	jmp	.L389
 .L386:
-	leaq	.LC71(%rip), %rcx
-	movl	$349, %edx
+	leaq	.LC65(%rip), %rcx
+	movl	$345, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
 	jmp	.L387
-.L384:
-	leaq	.LC70(%rip), %rcx
-	movl	$347, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	jmp	.L385
-.L377:
-	leaq	.LC67(%rip), %rcx
-	movl	$336, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	jmp	.L378
-.L375:
-	leaq	.LC66(%rip), %rcx
-	movl	$335, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	jmp	.L376
-.L373:
-	leaq	.LC65(%rip), %rcx
-	movl	$331, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	jmp	.L374
-.L361:
+.L374:
 	leaq	.LC57(%rip), %rcx
-	movl	$293, %edx
+	movl	$307, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
-	jmp	.L362
-.L344:
-	leaq	.LC52(%rip), %rcx
-	movl	$267, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	jmp	.L345
-.L236:
+	jmp	.L375
+.L252:
 	leaq	.LC13(%rip), %rcx
-	movl	$96, %edx
+	movl	$110, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
-	jmp	.L237
-.L232:
+	jmp	.L253
+.L248:
 	leaq	.LC12(%rip), %rcx
-	movl	$93, %edx
+	movl	$107, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
-	jmp	.L233
-.L230:
+	jmp	.L249
+.L246:
 	leaq	.LC11(%rip), %rcx
-	movl	$92, %edx
+	movl	$106, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
-	jmp	.L231
-.L228:
+	jmp	.L247
+.L244:
 	leaq	.LC10(%rip), %rcx
-	movl	$91, %edx
+	movl	$105, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
-	jmp	.L229
-.L328:
-	leaq	.LC47(%rip), %rcx
-	movl	$236, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	jmp	.L329
-.L238:
+	jmp	.L245
+.L254:
 	leaq	.LC14(%rip), %rcx
-	movl	$97, %edx
+	movl	$111, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
-	jmp	.L239
-.L323:
-	movl	%eax, test_total(%rip)
+	jmp	.L255
+.L341:
+	leaq	.LC47(%rip), %rcx
+	movl	$250, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L342
+.L339:
 	leaq	.LC46(%rip), %rcx
-	xorl	%eax, %eax
-	movl	$235, %edx
+	movl	$249, %edx
 	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
-	jmp	.L327
-.L321:
+	jmp	.L340
+.L337:
 	leaq	.LC45(%rip), %rcx
-	movl	$231, %edx
+	movl	$245, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
-	jmp	.L322
-.L302:
+	jmp	.L338
+.L357:
+	leaq	.LC52(%rip), %rcx
+	movl	$281, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L358
+.L318:
 	leaq	.LC37(%rip), %rcx
-	movl	$208, %edx
+	movl	$222, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L319
+.L315:
+	leaq	.LC36(%rip), %rcx
+	movl	$220, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L316
+.L313:
+	leaq	.LC34(%rip), %rcx
+	movl	$202, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L314
+.L306:
+	leaq	.LC32(%rip), %rcx
+	movl	$193, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L307
+.L302:
+	leaq	.LC31(%rip), %rcx
+	movl	$187, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
 	jmp	.L303
-.L299:
-	leaq	.LC36(%rip), %rcx
-	movl	$206, %edx
+.L298:
+	leaq	.LC30(%rip), %rcx
+	movl	$181, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
-	jmp	.L300
-.L297:
-	leaq	.LC34(%rip), %rcx
-	movl	$188, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	jmp	.L298
-.L290:
-	leaq	.LC32(%rip), %rcx
-	movl	$179, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	jmp	.L291
+	jmp	.L299
 .L286:
-	leaq	.LC31(%rip), %rcx
-	movl	$173, %edx
+	leaq	.LC25(%rip), %rcx
+	movl	$153, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
 	jmp	.L287
 .L282:
-	leaq	.LC30(%rip), %rcx
-	movl	$167, %edx
+	leaq	.LC24(%rip), %rcx
+	movl	$147, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
 	jmp	.L283
-.L270:
-	leaq	.LC25(%rip), %rcx
-	movl	$139, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	jmp	.L271
-.L266:
-	leaq	.LC24(%rip), %rcx
-	movl	$133, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	jmp	.L267
-.L264:
+.L280:
 	leaq	.LC23(%rip), %rcx
-	movl	$132, %edx
+	movl	$146, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
-	jmp	.L265
-.L514:
-	leaq	.LC77(%rip), %rdi
+	jmp	.L281
+.L409:
+	leaq	.LC77(%rip), %rcx
+	movl	$378, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L410
+.L559:
+	leaq	.LC98(%rip), %rdi
 	call	puts@PLT
 	xorl	%eax, %eax
-	jmp	.L218
-.L348:
-	movl	_async_tick_counter(%rip), %eax
-	addl	$1, test_passed(%rip)
-	addl	$1, %eax
-	movl	%eax, _async_tick_counter(%rip)
-	movzbl	_async_active_mask(%rip), %eax
-	testb	%al, %al
-	jne	.L354
-	addl	$2, %r8d
-	movl	%r8d, test_total(%rip)
-	jmp	.L356
-.L332:
-	movl	_async_tick_counter(%rip), %eax
-	addl	$1, test_passed(%rip)
-	addl	$1, %eax
-	movl	%eax, _async_tick_counter(%rip)
-	movzbl	_async_active_mask(%rip), %eax
-	testb	%al, %al
-	jne	.L338
-	addl	$2, %r8d
-	movl	%r8d, test_total(%rip)
-	jmp	.L340
-.L250:
-	leaq	.LC79(%rip), %rcx
-	movl	$103, %edx
+	jmp	.L234
+.L266:
+	leaq	.LC100(%rip), %rcx
+	movl	$117, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
 	addl	$1, test_total(%rip)
-	jmp	.L397
-.L379:
-	movl	$342, %edx
+	jmp	.L449
+.L361:
+	movl	_async_tick_counter(%rip), %eax
+	addl	$1, test_passed(%rip)
+	addl	$1, %eax
+	movl	%eax, _async_tick_counter(%rip)
+	movzbl	_async_active_mask(%rip), %eax
+	testb	%al, %al
+	jne	.L367
+	addl	$2, %r8d
+	movl	%r8d, test_total(%rip)
+	jmp	.L369
+.L345:
+	movl	_async_tick_counter(%rip), %eax
+	addl	$1, test_passed(%rip)
+	addl	$1, %eax
+	movl	%eax, _async_tick_counter(%rip)
+	movzbl	_async_active_mask(%rip), %eax
+	testb	%al, %al
+	jne	.L351
+	addl	$2, %r8d
+	movl	%r8d, test_total(%rip)
+	jmp	.L353
+.L327:
+	leaq	.LC41(%rip), %rcx
+	movl	$228, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	movl	test_total(%rip), %eax
+	jmp	.L328
+.L309:
+	leaq	.LC33(%rip), %rcx
+	movl	$196, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L310
+.L294:
+	leaq	.LC29(%rip), %rcx
+	movl	$175, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L297
+.L439:
+	leaq	.LC93(%rip), %rcx
+	movl	$429, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	movl	test_total(%rip), %r10d
+	jmp	.L440
+.L270:
+	leaq	.LC19(%rip), %rcx
+	movl	$119, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L271
+.L237:
+	leaq	.LC6(%rip), %rcx
+	movl	$90, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L238
+.L235:
+	leaq	.LC4(%rip), %rcx
+	movl	$89, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	movl	test_total(%rip), %eax
+	jmp	.L236
+.L264:
+	leaq	.LC17(%rip), %rcx
+	movl	$116, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	movl	test_total(%rip), %r8d
+	jmp	.L265
+.L276:
+	leaq	.LC22(%rip), %rcx
+	movl	$140, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L279
+.L288:
+	leaq	.LC26(%rip), %rcx
+	movl	$154, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L289
+.L403:
+	leaq	.LC73(%rip), %rcx
+	movl	$368, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L404
+.L392:
+	movl	$356, %edx
 	leaq	.LC68(%rip), %rcx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
 	movl	test_total(%rip), %edx
-	jmp	.L380
-.L371:
+	jmp	.L393
+.L384:
 	leaq	.LC64(%rip), %rcx
-	movl	$330, %edx
+	movl	$344, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
-	movl	test_total(%rip), %ebp
-	jmp	.L372
-.L369:
+	movl	test_total(%rip), %ebx
+	jmp	.L385
+.L382:
 	leaq	.LC63(%rip), %rcx
-	movl	$327, %edx
+	movl	$341, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
-	movl	test_total(%rip), %ebp
+	movl	test_total(%rip), %ebx
+	jmp	.L383
+.L549:
+	addl	$1, test_passed(%rip)
+	jmp	.L354
+.L552:
+	addl	$1, test_passed(%rip)
 	jmp	.L370
-.L260:
-	leaq	.LC22(%rip), %rcx
-	movl	$126, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	jmp	.L263
-.L293:
-	leaq	.LC33(%rip), %rcx
-	movl	$182, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	jmp	.L294
-.L272:
-	leaq	.LC26(%rip), %rcx
-	movl	$140, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	jmp	.L273
-.L278:
-	leaq	.LC29(%rip), %rcx
-	movl	$161, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	jmp	.L281
-.L254:
-	leaq	.LC19(%rip), %rcx
-	movl	$105, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	jmp	.L255
-.L311:
-	leaq	.LC41(%rip), %rcx
-	movl	$214, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	movl	test_total(%rip), %eax
-	jmp	.L312
-.L390:
-	leaq	.LC73(%rip), %rcx
-	movl	$354, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	jmp	.L391
-.L221:
-	leaq	.LC6(%rip), %rcx
-	movl	$76, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	jmp	.L222
-.L219:
-	leaq	.LC4(%rip), %rcx
-	movl	$75, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	movl	test_total(%rip), %eax
-	jmp	.L220
-.L248:
-	leaq	.LC17(%rip), %rcx
-	movl	$102, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	movl	test_total(%rip), %r8d
-	jmp	.L249
-.L500:
+.L543:
 	addl	$1, test_passed(%rip)
-	jmp	.L308
-.L501:
+	jmp	.L324
+.L544:
 	addl	$1, test_passed(%rip)
-	jmp	.L310
-.L506:
-	addl	$1, test_passed(%rip)
-	jmp	.L341
-.L509:
-	addl	$1, test_passed(%rip)
-	jmp	.L357
-.L499:
-	leaq	.LC38(%rip), %rcx
-	movl	$209, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	movl	test_total(%rip), %ecx
-	jmp	.L305
-.L504:
-	leaq	.LC48(%rip), %rcx
-	movl	$239, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	movl	_async_tick_counter(%rip), %eax
-	addl	$1, %eax
-	movl	%eax, _async_tick_counter(%rip)
-	movzbl	_async_active_mask(%rip), %eax
-	testb	%al, %al
-	jne	.L338
-	addl	$1, test_total(%rip)
-	jmp	.L395
-.L502:
-	leaq	.LC42(%rip), %rcx
-	movl	$215, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	movl	test_total(%rip), %ecx
-	jmp	.L314
-.L507:
-	leaq	.LC53(%rip), %rcx
-	movl	$270, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	movl	_async_tick_counter(%rip), %eax
-	addl	$1, %eax
-	movl	%eax, _async_tick_counter(%rip)
-	movzbl	_async_active_mask(%rip), %eax
-	testb	%al, %al
-	jne	.L354
-	addl	$1, test_total(%rip)
-	jmp	.L394
-.L252:
-	leaq	.LC18(%rip), %rcx
-	movl	$104, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	jmp	.L253
-.L503:
+	jmp	.L326
+.L546:
 	leaq	.LC43(%rip), %rcx
-	movl	$216, %edx
+	movl	$230, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
-	jmp	.L317
-.L342:
+	jmp	.L333
+.L547:
+	leaq	.LC48(%rip), %rcx
+	movl	$253, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	movl	_async_tick_counter(%rip), %eax
+	addl	$1, %eax
+	movl	%eax, _async_tick_counter(%rip)
+	movzbl	_async_active_mask(%rip), %eax
+	testb	%al, %al
+	jne	.L351
+	addl	$1, test_total(%rip)
+	jmp	.L447
+.L550:
+	leaq	.LC53(%rip), %rcx
+	movl	$284, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	movl	_async_tick_counter(%rip), %eax
+	addl	$1, %eax
+	movl	%eax, _async_tick_counter(%rip)
+	movzbl	_async_active_mask(%rip), %eax
+	testb	%al, %al
+	jne	.L367
+	addl	$1, test_total(%rip)
+	jmp	.L446
+.L545:
+	leaq	.LC42(%rip), %rcx
+	movl	$229, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	movl	test_total(%rip), %ecx
+	jmp	.L330
+.L542:
+	leaq	.LC38(%rip), %rcx
+	movl	$223, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	movl	test_total(%rip), %ecx
+	jmp	.L321
+.L268:
+	leaq	.LC18(%rip), %rcx
+	movl	$118, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L269
+.L290:
+	leaq	.LC28(%rip), %rcx
+	movl	$169, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L291
+.L377:
+	leaq	.LC58(%rip), %rcx
+	movl	$311, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	jmp	.L378
+.L355:
 	leaq	.LC51(%rip), %rcx
-	movl	$266, %edx
+	movl	$280, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
 	movl	test_total(%rip), %eax
-	jmp	.L343
-.L364:
-	leaq	.LC58(%rip), %rcx
-	movl	$297, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	jmp	.L365
-.L256:
-	leaq	.LC21(%rip), %rcx
-	movl	$120, %edx
-	leaq	.LC5(%rip), %rsi
-	xorl	%eax, %eax
-	movl	$1, %edi
-	call	__printf_chk@PLT
-	jmp	.L257
-.L223:
+	jmp	.L356
+.L239:
 	leaq	.LC5(%rip), %rsi
 	leaq	.LC8(%rip), %rcx
-	movl	$89, %edx
+	movl	$103, %edx
 	xorl	%eax, %eax
 	movl	$1, %edi
 	movq	%rsi, 8(%rsp)
@@ -2606,27 +3065,42 @@ main:
 	call	__printf_chk@PLT
 	addl	$1, test_total(%rip)
 	movq	8(%rsp), %rsi
-	jmp	.L226
-.L274:
-	leaq	.LC28(%rip), %rcx
-	movl	$155, %edx
+	jmp	.L242
+.L272:
+	leaq	.LC21(%rip), %rcx
+	movl	$134, %edx
 	leaq	.LC5(%rip), %rsi
 	xorl	%eax, %eax
 	movl	$1, %edi
 	call	__printf_chk@PLT
-	jmp	.L275
-.L508:
+	jmp	.L273
+.L437:
+	leaq	.LC92(%rip), %rcx
+	movl	$426, %edx
+	leaq	.LC5(%rip), %rsi
+	xorl	%eax, %eax
+	movl	$1, %edi
+	call	__printf_chk@PLT
+	movl	test_total(%rip), %r10d
+	jmp	.L438
+.L558:
+	addl	$1, test_passed(%rip)
+	jmp	.L432
+.L557:
+	addl	$1, test_passed(%rip)
+	jmp	.L430
+.L551:
 	addl	$2, %r8d
 	movl	%r8d, test_total(%rip)
-	jmp	.L394
-.L505:
+	jmp	.L446
+.L548:
 	addl	$2, %r8d
 	movl	%r8d, test_total(%rip)
-	jmp	.L395
-.L515:
+	jmp	.L447
+.L560:
 	call	__stack_chk_fail@PLT
 	.cfi_endproc
-.LFE80:
+.LFE84:
 	.size	main, .-main
 	.data
 	.type	last_cb_slot, @object
@@ -2678,6 +3152,26 @@ _async_first_free_nibble:
 	.size	_async_slot_bit, 8
 _async_slot_bit:
 	.ascii	"\001\002\004\b\020 @\200"
+	.local	TIMSK
+	.comm	TIMSK,1,1
+	.local	OCR2
+	.comm	OCR2,1,1
+	.local	OCR1AL
+	.comm	OCR1AL,1,1
+	.local	OCR1AH
+	.comm	OCR1AH,1,1
+	.local	TCNT2
+	.comm	TCNT2,1,1
+	.local	TCNT1L
+	.comm	TCNT1L,1,1
+	.local	TCNT1H
+	.comm	TCNT1H,1,1
+	.local	TCCR2
+	.comm	TCCR2,1,1
+	.local	TCCR1B
+	.comm	TCCR1B,1,1
+	.local	TCCR1A
+	.comm	TCCR1A,1,1
 	.ident	"GCC: (Ubuntu 12.3.0-1ubuntu1~22.04.3) 12.3.0"
 	.section	.note.GNU-stack,"",@progbits
 	.section	.note.gnu.property,"a"

@@ -1,6 +1,6 @@
 {
   "label": "CURRENT",
-  "version": 12,
+  "version": 5,
   "max_slots": 4,
   "timer_bits": 16,
   "tick_hz": 1000,
@@ -17,11 +17,11 @@
     "ticks_until_next": 16
   },
   "host_latency_ns": {
-    "idle_tick": 2.44,
-    "active_tick": 2.44,
-    "start_cancel": 11.32,
-    "restart": 3.81,
-    "active_count": 0.32,
-    "remaining": 2.21
+    "idle_tick": 2.46,
+    "active_tick": 2.63,
+    "start_cancel": 11.53,
+    "restart": 3.88,
+    "active_count": 0.35,
+    "remaining": 1.99
   }
 }

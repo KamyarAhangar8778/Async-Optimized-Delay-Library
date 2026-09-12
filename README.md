@@ -1,22 +1,22 @@
-# async_delay.h — Non-Blocking Timer & Delay Library for AVR
+# async_delay.h: Non-Blocking Timer & Delay Library for AVR
 
-`async_delay.h` is a high-performance, header-only, non-blocking asynchronous timer library designed for 8-bit AVR microcontrollers (**ATmega8 / ATmega16 / ATmega32**) and Arduino environments, compiled with **CodeVisionAVR**, **AVR-GCC**, or natively tested with **GCC / Clang** on host systems.
+`async_delay.h` is a header-only, non-blocking asynchronous timer library designed for 8-bit AVR microcontrollers (**ATmega8 / ATmega16 / ATmega32**) and Arduino environments. It compiles with **CodeVisionAVR**, **AVR-GCC**, and **GCC / Clang** on host systems for unit testing.
 
-> **Contract for AI Agents & Firmware Engineers:**
-> This document is the definitive integration specification for `async_delay.h` (v12). When incorporating this library into any project, all necessary configuration macros, hardware timer formulas, concurrency constraints, API contracts, CodeVisionAVR quirks, and verified implementation patterns are fully detailed below.
+> **Integration Specification:**
+> This document details configuration options, hardware timer formulas, concurrency constraints, API contracts, CodeVisionAVR notes, and verified patterns for `async_delay.h` (v5).
 
 ---
 
 ## 1. System Overview & Architecture
 
-Standard delay routines (such as `delay_ms()`) block the CPU, wasting thousands of clock cycles and freezing UI, communications, and sensor monitoring. `async_delay.h` decouples time tracking from program execution:
+Standard delay functions like `delay_ms()` block the CPU, freezing UI responsiveness and sensor sampling. `async_delay.h` decouples time tracking from main loop execution:
 
-1. **Hardware Timer Base:** A dedicated hardware timer triggers an Interrupt Service Routine (ISR) at a deterministic frequency (`ASYNC_DELAY_TICK_HZ`).
-2. **Deterministic ISR Tick (`async_delay_tick`):** Increments an internal wrap-safe tick counter and checks active timers using an $O(1)$ earliest-deadline gate. Idle and non-due ticks exit in minimal cycles (~12–15 cycles) without servicing all slots.
+1. **Hardware Timer Base:** A hardware timer triggers an Interrupt Service Routine (ISR) at a fixed frequency (`ASYNC_DELAY_TICK_HZ`).
+2. **ISR Tick (`async_delay_tick`):** Increments a wrap-safe tick counter and checks active timers using an O(1) earliest-deadline check. Idle ticks return in ~12–15 cycles.
 3. **Flexible Dispatch:**
-   - **ISR Callbacks:** Execute immediately inside the timer interrupt for low-jitter pin toggling or state flags.
-   - **Polling Mode:** The main loop checks `async_delay_elapsed(slot_id)` and executes tasks without ISR overhead.
-   - **Deferred Callbacks:** The ISR flags expired slots; `async_delay_poll()` dispatches the callbacks from the main loop context, allowing heavy operations (e.g., LCD, UART, math) with structured callback syntax.
+   - **ISR Callbacks:** Run inside the timer interrupt for fast pin toggling or state flags.
+   - **Polling Mode:** The main loop checks `async_delay_elapsed(slot_id)` directly.
+   - **Deferred Callbacks:** The ISR sets a pending flag, and `async_delay_poll()` dispatches callbacks from the main loop context, allowing longer operations (like LCD or UART writes) safely.
 
 ```
        [ Hardware Timer CTC Match ]
@@ -105,8 +105,8 @@ Measured on ATmega8 @ 8 MHz (`TIMER_BITS=16`, `MAX_SLOTS=4`, `TICK_HZ=1000`):
 
 | Configuration | SRAM | Flash | ISR Idle Overhead | Main Loop Poll Overhead | CPU Load @ 1 kHz |
 |---|---|---|---|---|---|
-| **Default Settings** | **34 bytes** | **378 words** (~756 B) | **~85 cycles** (~10.6 µs) | — | **~1.06 %** |
-| **Deferred Callbacks** (`DEFERRED=1`) | **35 bytes** (+1 B) | **397 words** (~794 B) | **~85 cycles** (~10.6 µs) | **~25 cycles** (when idle) | **~1.3 %** |
+| **Default Settings** | **34 bytes** | **378 words** (~756 B) | **~12 cycles** (~1.5 µs @ 8 MHz) | — | **~0.15 %** |
+| **Deferred Callbacks** (`DEFERRED=1`) | **35 bytes** (+1 B) | **397 words** (~794 B) | **~12 cycles** (~1.5 µs @ 8 MHz) | **~25 cycles** (when idle) | **~0.18 %** |
 
 *Note: In Deferred Mode, callbacks run in main context (`async_delay_poll()`), eliminating ISR latency constraints and allowing LCD, UART, and delay operations inside callbacks.*
 
@@ -134,8 +134,8 @@ $$\text{OCR} = \frac{\text{Timer Frequency}}{\text{ASYNC\_DELAY\_TICK\_HZ}} - 1 
 
 *\*Note: Timer0 on ATmega8 lacks CTC mode. Use Timer2 or Timer1 on ATmega8. On ATmega16/32, Timer0 supports CTC mode.*
 
-### CodeWizardAVR Input Warning
-> **Crucial Tooling Quirk:** The "Compare" text box in CodeWizardAVR only accepts **two decimal digits**. Typing `124` gets truncated or corrupted into `80`. **Always enter values greater than 99 as hexadecimal** (e.g., write `0x7C` for 124, `0xF9` for 249).
+### CodeWizardAVR Input Limit
+> **Tooling Note:** The "Compare" text box in CodeWizardAVR only accepts **two decimal digits**. Typing `124` gets truncated or corrupted into `80`. **Always enter values greater than 99 as hexadecimal** (e.g., write `0x7C` for 124, `0xF9` for 249).
 
 ### Ready Hardware Initialization Snippets
 
@@ -187,6 +187,7 @@ All library functions are declared `static` to allow clean, self-contained singl
 | `async_delay_active_count` | `unsigned char async_delay_active_count(void)` | Main / Callback | Returns the total count of currently running active slots. |
 | `async_delay_remaining` | `async_tick_t async_delay_remaining(unsigned char slot_id)` | Main / Callback | Returns remaining ticks until expiry for the given slot (or `0` if inactive/expired). |
 | `async_delay_ticks_until_next` | `async_tick_t async_delay_ticks_until_next(void)` | Main Loop | Calculates ticks until the nearest expiry among all active slots. Returns `0` if none active. Essential for AVR sleep modes (Idle/Power-save). |
+| `async_delay_sleep_idle` | `void async_delay_sleep_idle(void)` | Main Loop | Atomically enters AVR IDLE sleep mode until the next timer tick ISR (`FEATURE_SLEEP=1`). |
 | `async_delay_tick` | `void async_delay_tick(void)` | Hardware ISR Only | Increments the internal tick counter and evaluates due timers. |
 | `async_delay_poll` | `void async_delay_poll(void)` | Main Loop Only | Dispatches pending deferred callbacks (only when `DEFERRED_CALLBACKS=1`). |
 
@@ -226,9 +227,9 @@ typedef void (*async_delay_cb_t)(unsigned char slot_id);
 
 ---
 
-## 6. Critical Invariants & Rules for AI Agents
+## 6. Rules and Operational Invariants
 
-When writing firmware using `async_delay.h`, adhere strictly to these engineering constraints:
+When writing firmware using `async_delay.h`, adhere strictly to these constraints:
 
 ### 1. The Polling Slot Allocation Leak
 When a timer is started without a callback (`cb = (void *)0`), the slot transitions to `ASYNC_SLOT_EXPIRED` upon reaching its deadline.
@@ -568,13 +569,13 @@ void main(void)
 |---|---|---|
 | **Timers never fire / `elapsed()` always returns 0** | Global interrupts disabled or timer not interrupting. | 1. Verify `#asm("sei")` is called after all initializations.<br>2. Check `TIMSK` (e.g. `TIMSK |= (1 << OCIE2)`).<br>3. Verify timer CTC bits (`WGM21`). |
 | **All delays run 2x slower or 2x faster** | Clock mismatch or OCR calculation error. | 1. Ensure project frequency in CodeVisionAVR matches hardware (e.g. 8.000000 MHz vs 16.000000 MHz).<br>2. Recalculate OCR: $\text{OCR} = (F_{\text{CPU}} / \text{Prescaler} / 1000) - 1$. |
-| **`async_delay_start()` returns `0xFF` (`ASYNC_DELAY_NO_SLOT`)** | Slot exhaustion / polling slot memory leak. | 1. Confirm you are calling `async_delay_elapsed()` for all polling slots.<br>2. Increase `ASYNC_DELAY_MAX_SLOTS` up to 8.<br>3. Verify cancelled tasks call `async_delay_cancel()`. |
+| **`async_delay_start()` returns `0xFF` (`ASYNC_DELAY_NO_SLOT`)** | Slot exhaustion / polling slot memory leak. | 1. Confirm you are calling `async_delay_elapsed()` for all polling slots.<br>2. Increase `ASYNC_DELAY_MAX_SLOTS` up to 16.<br>3. Verify cancelled tasks call `async_delay_cancel()`. |
 | **Deferred callbacks never execute** | Missing main loop dispatch. | When `ASYNC_DELAY_DEFERRED_CALLBACKS = 1`, you **must** call `async_delay_poll()` inside `while(1)`. |
 | **System freezes or UART/LCD corrupts** | Lengthy code executed inside ISR callback. | Move heavy processing to the main loop using Polling Mode or Deferred Mode. |
 | **Compile Error: `undefined symbol 'SREG'`** | Header inclusion order error. | `#include <mega8.h>` must precede `#include <async_delay.h>`. |
 | **Compile Error: `invalid combination of type specifiers`** | Keyword collision. | Look for variables named `bit` and rename them (e.g. `slot_bit`). |
 | **Compile Error: `must declare first in block`** | C89 violation. | Move all variable declarations to the top of the function/block before any code statements. |
-| **Compile Error: `...at most 8 slots`** | Configuration violation. | When bitmask optimization is active, `ASYNC_DELAY_MAX_SLOTS` cannot exceed 8. |
+| **Compile Error: `...at most 16 slots`** | Configuration violation. | When bitmask optimization is active, `ASYNC_DELAY_MAX_SLOTS` cannot exceed 16. |
 
 ---
 
@@ -601,7 +602,12 @@ void main(void) {
     // ASYNC_DELAY_SETUP_TIMER1_CTC_4MHZ_1KHZ();
     // ASYNC_DELAY_SETUP_TIMER1_CTC_2MHZ_1KHZ();
     // ASYNC_DELAY_SETUP_TIMER1_CTC_1MHZ_1KHZ();
+    // ASYNC_DELAY_SETUP_TIMER2_CTC_16MHZ_1KHZ();
     // ASYNC_DELAY_SETUP_TIMER2_CTC_8MHZ_1KHZ();
+    // ASYNC_DELAY_SETUP_TIMER2_CTC_4MHZ_1KHZ();
+    // ASYNC_DELAY_SETUP_TIMER2_CTC_2MHZ_1KHZ();
+    // ASYNC_DELAY_SETUP_TIMER2_CTC_1MHZ_1KHZ();
+    // async_delay_hw_timer2_init(f_cpu_hz, tick_hz);
 
     #asm("sei") // Enable global interrupts
     async_delay_init();
@@ -614,7 +620,7 @@ void main(void) {
 
 ---
 
-## 10. Cross-Compiler & Platform Portability (v1)
+## 10. Cross-Compiler & Platform Portability
 
 `async_delay.h` is portable across multiple toolchains and target environments:
 
@@ -678,16 +684,15 @@ Measured on default configuration (`TIMER_BITS=16`, `MAX_SLOTS=4`, `TICK_HZ=1000
 
 `async_delay.h` contains a build synchronization constant:
 ```c
-#define ASYNC_DELAY_VERSION 1
+#define ASYNC_DELAY_VERSION 5
 ```
 
 To guard against silent regressions or outdated local copies across external project directories, add this compile-time assertion to your application headers:
 
 ```c
-#if ASYNC_DELAY_VERSION != 1
+#if ASYNC_DELAY_VERSION != 5
 #error "async_delay.h version mismatch! Update the header copy in your include path."
 #endif
 ```
-*(This validation executes strictly in the preprocessor and incurs zero Flash or SRAM overhead).*
 *(This validation executes strictly in the preprocessor and incurs zero Flash or SRAM overhead).*
 

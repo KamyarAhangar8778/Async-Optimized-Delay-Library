@@ -18,10 +18,24 @@
 #include <string.h>
 #include <assert.h>
 
+#ifndef __AVR__
+static volatile unsigned char TCCR1A = 0;
+static volatile unsigned char TCCR1B = 0;
+static volatile unsigned char TCCR2 = 0;
+static volatile unsigned char TCNT1H = 0;
+static volatile unsigned char TCNT1L = 0;
+static volatile unsigned char TCNT2 = 0;
+static volatile unsigned char OCR1AH = 0;
+static volatile unsigned char OCR1AL = 0;
+static volatile unsigned char OCR2 = 0;
+static volatile unsigned char TIMSK = 0;
+#endif
+
 #ifndef ASYNC_DELAY_TICK_HZ
 #define ASYNC_DELAY_TICK_HZ 1000
 #endif
 
+#define ASYNC_DELAY_TEST_HARDWARE_MACROS 1
 #include "../async_delay.h"
 
 static int test_total = 0;
@@ -354,6 +368,71 @@ static void test_lut_alloc_and_popcount(void)
     TEST_ASSERT(async_delay_active_count() == 0, "popcount 0 after cancel all");
 }
 
+static void test_hardware_timer_setup(void)
+{
+    printf("Running test_hardware_timer_setup...\n");
+    TCCR2 = 0; OCR2 = 0; TIMSK = 0;
+    ASYNC_DELAY_SETUP_TIMER2_CTC_8MHZ_1KHZ();
+    TEST_ASSERT(TCCR2 == 0x0C, "Timer2 CTC 8MHz prescaler is /64 (0x0C)");
+    TEST_ASSERT(OCR2 == 124, "Timer2 CTC 8MHz OCR2 is 124");
+    TEST_ASSERT((TIMSK & 0x80) != 0, "Timer2 OCIE2 enabled");
+
+    TCCR2 = 0; OCR2 = 0; TIMSK = 0;
+    ASYNC_DELAY_SETUP_TIMER2_CTC_16MHZ_1KHZ();
+    TEST_ASSERT(TCCR2 == 0x0C, "Timer2 CTC 16MHz prescaler is /64 (0x0C)");
+    TEST_ASSERT(OCR2 == 249, "Timer2 CTC 16MHz OCR2 is 249");
+
+    TCCR2 = 0; OCR2 = 0; TIMSK = 0;
+    ASYNC_DELAY_SETUP_TIMER2_CTC_4MHZ_1KHZ();
+    TEST_ASSERT(TCCR2 == 0x0B, "Timer2 CTC 4MHz prescaler is /32 (0x0B)");
+    TEST_ASSERT(OCR2 == 124, "Timer2 CTC 4MHz OCR2 is 124");
+
+    TCCR2 = 0; OCR2 = 0; TIMSK = 0;
+    ASYNC_DELAY_SETUP_TIMER2_CTC_2MHZ_1KHZ();
+    TEST_ASSERT(TCCR2 == 0x0A, "Timer2 CTC 2MHz prescaler is /8 (0x0A)");
+    TEST_ASSERT(OCR2 == 249, "Timer2 CTC 2MHz OCR2 is 249");
+
+    TCCR2 = 0; OCR2 = 0; TIMSK = 0;
+    ASYNC_DELAY_SETUP_TIMER2_CTC_1MHZ_1KHZ();
+    TEST_ASSERT(TCCR2 == 0x0A, "Timer2 CTC 1MHz prescaler is /8 (0x0A)");
+    TEST_ASSERT(OCR2 == 124, "Timer2 CTC 1MHz OCR2 is 124");
+
+    TCCR1A = 0; TCCR1B = 0; OCR1AH = 0; OCR1AL = 0; TIMSK = 0;
+    ASYNC_DELAY_SETUP_TIMER1_CTC_8MHZ_1KHZ();
+    TEST_ASSERT(TCCR1B == 0x0A, "Timer1 CTC 8MHz prescaler is /8 (0x0A)");
+    TEST_ASSERT(OCR1AH == 0x03 && OCR1AL == 0xE7, "Timer1 CTC 8MHz OCR is 999 (0x03E7)");
+
+    async_delay_hw_timer1_init(16000000UL, 1000);
+    TEST_ASSERT(OCR1AH == 0x07 && OCR1AL == 0xCF, "Timer1 hw init 16MHz/1kHz OCR is 1999 (0x07CF)");
+
+    TCCR2 = 0; OCR2 = 0; TIMSK = 0;
+    async_delay_hw_timer2_init(8000000UL, 1000);
+    TEST_ASSERT(TCCR2 == 0x0B, "Timer2 hw init 8MHz/1kHz prescaler is /32 (0x0B)");
+    TEST_ASSERT(OCR2 == 249, "Timer2 hw init 8MHz/1kHz OCR2 is 249");
+}
+
+static void test_duration_boundary_limits(void)
+{
+    unsigned char id;
+    printf("Running test_duration_boundary_limits...\n");
+    async_delay_init();
+
+    // Oversized duration (> _ASYNC_HALF_RANGE) must fail
+    id = async_delay_start((async_tick_t)(_ASYNC_HALF_RANGE + 1), (void *)0);
+    TEST_ASSERT(id == ASYNC_DELAY_NO_SLOT, "start fails for duration > half_range");
+
+    // Exact half range must succeed
+    id = async_delay_start(_ASYNC_HALF_RANGE, (void *)0);
+    TEST_ASSERT(id != ASYNC_DELAY_NO_SLOT, "start succeeds for duration == half_range");
+
+#if ASYNC_DELAY_FEATURE_RESTART
+    TEST_ASSERT(async_delay_restart(id, (async_tick_t)(_ASYNC_HALF_RANGE + 1)) == 0, "restart fails for new_duration > half_range");
+    TEST_ASSERT(async_delay_restart(id, 100) == 1, "restart succeeds for valid duration");
+#endif
+
+    async_delay_cancel(id);
+}
+
 // =============================================================
 int main(void)
 {
@@ -379,6 +458,8 @@ int main(void)
     test_slot_exhaustion();
     test_lut_bitmask();
     test_lut_alloc_and_popcount();
+    test_hardware_timer_setup();
+    test_duration_boundary_limits();
 
     printf("\n----------------------------------------\n");
     printf("Tests Run: %d | Passed: %d | Failed: %d\n",
